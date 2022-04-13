@@ -9,6 +9,8 @@ import math
 from types import SimpleNamespace as map
 from google.protobuf.json_format import MessageToDict
 
+debug_mode = map(text_on=True)
+
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
@@ -35,7 +37,7 @@ finger_length_map = map(
     ring=26.3,
     pinky=23.7
 )
-tip_dip_length_ratio = 0.8
+tip_dip_length_ratio = 0.75
 
 image_list = []
 
@@ -158,15 +160,27 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                     )
                 )
 
-                hand_landmarks_info.length_distance_ratio = ratio = math.fabs(
-                    hand_landmarks_info.fingers.middle.tip.y - hand_landmarks_info.fingers.middle.dip.y
-                ) / (finger_length_map.middle * tip_dip_length_ratio)
-
+                # hand_landmarks_info.length_distance_ratio = ratio = math.fabs(
+                #     hand_landmarks_info.fingers.middle.tip.y - hand_landmarks_info.fingers.middle.dip.y
+                # ) / (finger_length_map.middle * tip_dip_length_ratio)
+                y0 = 10
                 for k, v in hand_landmarks_info.fingers.__dict__.items():
                     x_delta, y_delta = v.tip.x - v.dip.x, v.tip.y - v.dip.y
+                    tip_dip_distance = math.sqrt(math.pow(x_delta, 2) + math.pow(y_delta, 2))
+                    vertical_distance = tip_dip_distance / tip_dip_length_ratio
+                    ratio = tip_dip_distance / tip_dip_length_ratio / finger_length_map.__dict__[k]
                     horizontal_distance = finger_width_map.__dict__[k] * ratio
-                    vertical_distance = finger_length_map.__dict__[k] * ratio / tip_dip_length_ratio
 
+                    cv2.putText(
+                        img=image,
+                        text="{}: x_delta: {:.2f}, y_delta: {:.2f}".format(k, x_delta, y_delta),
+                        org=(10, y0),
+                        fontFace=cv2.FONT_HERSHEY_PLAIN,
+                        fontScale=1,
+                        color=(0x00, 0x00, 0xFF),
+                        thickness=1
+                    )
+                    y0 += 20
                     if -EPS < x_delta < EPS:
                         v.left_down_pos = map(
                             x=v.dip.x,
@@ -188,6 +202,16 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                         angle = math.atan(y_delta / x_delta)
                         sine = math.sin(angle)
                         cosine = math.cos(angle)
+                        cv2.putText(
+                            img=image,
+                            text="angle: {:.2f}, sin: {:.2f}, cos: {:.2f}".format(angle, sine, cosine),
+                            org=(10, y0),
+                            fontFace=cv2.FONT_HERSHEY_PLAIN,
+                            fontScale=1,
+                            color=(0x00, 0x00, 0xFF),
+                            thickness=1
+                        )
+                        y0 += 20
                         v.left_down_pos = map(
                             x=v.dip.x - horizontal_distance / 2 * sine,
                             y=v.dip.y + horizontal_distance / 2 * cosine
@@ -197,12 +221,12 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                             y=v.dip.y - horizontal_distance / 2 * cosine
                         )
                         v.left_up_pos = map(
-                            x=v.dip.x - horizontal_distance / 2 * sine + vertical_distance * cosine,
-                            y=v.dip.y + horizontal_distance / 2 * cosine + vertical_distance * sine
+                            x=v.left_down_pos.x + vertical_distance * cosine,
+                            y=v.left_down_pos.y + vertical_distance * sine
                         )
                         v.right_up_pos = map(
-                            x=v.dip.x + horizontal_distance / 2 * sine + vertical_distance * cosine,
-                            y=v.dip.y - horizontal_distance / 2 * cosine + vertical_distance * sine
+                            x=v.right_down_pos.x + vertical_distance * cosine,
+                            y=v.right_down_pos.y + vertical_distance * sine
                         )
 
                     cv2.line(
