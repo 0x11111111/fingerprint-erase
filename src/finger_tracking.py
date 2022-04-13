@@ -9,7 +9,7 @@ import math
 from types import SimpleNamespace as map
 from google.protobuf.json_format import MessageToDict
 
-debug_mode = map(text_on=True)
+debug_mode = map(track_on=True, coordinate_on=True, output_on=True)
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
@@ -37,7 +37,7 @@ finger_length_map = map(
     ring=26.3,
     pinky=23.7
 )
-tip_dip_length_ratio = 0.75
+tip_dip_length_ratio = 0.6
 
 image_list = []
 
@@ -77,7 +77,8 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
         if results.multi_hand_landmarks:
             for idx, handedness in enumerate(results.multi_handedness):
                 handedness_dict = MessageToDict(handedness)
-            print(handedness_dict)
+            if debug_mode.output_on:
+                print(handedness_dict)
 
             for num, hand in enumerate(results.multi_hand_landmarks):
                 mp_drawing.draw_landmarks(
@@ -160,136 +161,43 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                     )
                 )
 
-                # hand_landmarks_info.length_distance_ratio = ratio = math.fabs(
-                #     hand_landmarks_info.fingers.middle.tip.y - hand_landmarks_info.fingers.middle.dip.y
-                # ) / (finger_length_map.middle * tip_dip_length_ratio)
-                y0 = 10
                 for k, v in hand_landmarks_info.fingers.__dict__.items():
                     x_delta, y_delta = v.tip.x - v.dip.x, v.tip.y - v.dip.y
                     tip_dip_distance = math.sqrt(math.pow(x_delta, 2) + math.pow(y_delta, 2))
-                    vertical_distance = tip_dip_distance / tip_dip_length_ratio
                     ratio = tip_dip_distance / tip_dip_length_ratio / finger_length_map.__dict__[k]
-                    horizontal_distance = finger_width_map.__dict__[k] * ratio
 
-                    cv2.putText(
-                        img=image,
-                        text="{}: x_delta: {:.2f}, y_delta: {:.2f}".format(k, x_delta, y_delta),
-                        org=(10, y0),
-                        fontFace=cv2.FONT_HERSHEY_PLAIN,
-                        fontScale=1,
-                        color=(0x00, 0x00, 0xFF),
-                        thickness=1
-                    )
-                    y0 += 20
-                    if -EPS < x_delta < EPS:
-                        v.left_down_pos = map(
-                            x=v.dip.x,
-                            y=v.dip.y - horizontal_distance / 2
+                    if debug_mode.track_on:
+                        cv2.circle(
+                            img=image,
+                            center=(int(v.tip.x), int(v.tip.y)),
+                            radius=int(ratio * finger_width_map.__dict__[k]),
+                            color=(0x00, 0xFF, 0x00),
+                            thickness=2
                         )
-                        v.right_down_pos = map(
-                            x=v.dip.x,
-                            y=v.dip.y + horizontal_distance / 2
-                        )
-                        v.left_up_pos = map(
-                            x=v.dip.x + vertical_distance,
-                            y=v.dip.y - horizontal_distance / 2
-                        )
-                        v.right_up_pos = map(
-                            x=v.dip.x + vertical_distance,
-                            y=v.dip.y + horizontal_distance / 2
-                        )
-                    else:
-                        angle = math.atan(y_delta / x_delta)
-                        sine = math.sin(angle)
-                        cosine = math.cos(angle)
+
+                if debug_mode.coordinate_on:
+                    text += f'handedness: {hand_landmarks_info.handedness}\n'
+                    for k, v in hand_landmarks_info.fingers.__dict__.items():
+                        text += \
+                            '{} tip: ({:.3f}, {:.3f}, {:.6f})\n'.format(k, v.tip.x, v.tip.y, v.tip.z)
+
+                    y0, dy = int(image_height * 0.1), 15
+                    for i, line in enumerate(text.split('\n')):
                         cv2.putText(
                             img=image,
-                            text="angle: {:.2f}, sin: {:.2f}, cos: {:.2f}".format(angle, sine, cosine),
-                            org=(10, y0),
+                            text=line,
+                            org=(10, y0 + i * dy),
                             fontFace=cv2.FONT_HERSHEY_PLAIN,
                             fontScale=1,
                             color=(0x00, 0x00, 0xFF),
                             thickness=1
                         )
-                        y0 += 20
-                        v.left_down_pos = map(
-                            x=v.dip.x - horizontal_distance / 2 * sine,
-                            y=v.dip.y + horizontal_distance / 2 * cosine
-                        )
-                        v.right_down_pos = map(
-                            x=v.dip.x + horizontal_distance / 2 * sine,
-                            y=v.dip.y - horizontal_distance / 2 * cosine
-                        )
-                        v.left_up_pos = map(
-                            x=v.left_down_pos.x + vertical_distance * cosine,
-                            y=v.left_down_pos.y + vertical_distance * sine
-                        )
-                        v.right_up_pos = map(
-                            x=v.right_down_pos.x + vertical_distance * cosine,
-                            y=v.right_down_pos.y + vertical_distance * sine
-                        )
-
-                    cv2.line(
-                        img=image,
-                        pt1=(int(v.left_down_pos.x), int(v.left_down_pos.y)),
-                        pt2=(int(v.right_down_pos.x), int(v.right_down_pos.y)),
-                        color=(0x00, 0xFF, 0x00),
-                        thickness=2
-                    )
-                    cv2.line(
-                        img=image,
-                        pt1=(int(v.right_down_pos.x), int(v.right_down_pos.y)),
-                        pt2=(int(v.right_up_pos.x), int(v.right_up_pos.y)),
-                        color=(0x00, 0xFF, 0x00),
-                        thickness=2
-                    )
-                    cv2.line(
-                        img=image,
-                        pt1=(int(v.left_up_pos.x), int(v.left_up_pos.y)),
-                        pt2=(int(v.right_up_pos.x), int(v.right_up_pos.y)),
-                        color=(0x00, 0xFF, 0x00),
-                        thickness=2
-                    )
-                    cv2.line(
-                        img=image,
-                        pt1=(int(v.left_up_pos.x), int(v.left_up_pos.y)),
-                        pt2=(int(v.left_down_pos.x), int(v.left_down_pos.y)),
-                        color=(0x00, 0xFF, 0x00),
-                        thickness=2
-                    )
 
                 hand_landmarks_map.hand_landmarks_list.append(hand_landmarks_info)
+
             hand_landmarks_map.image = copy.deepcopy(image)
 
 
-                # text += f'HANDEDNESS: {results.multi_handedness[idx].classification[0].label}\n' + \
-                #     f'THUMB tip coordinates: (' + \
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP].x * image_width}, ' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP].y * image_height})\n' +\
-                #     f'INDEX finger tip coordinates: (' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].x * image_width}, ' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.INDEX_FINGER_TIP].y * image_height})\n' +\
-                #     f'MIDDLE finger tip coordinates: (' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].x * image_width}, ' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.MIDDLE_FINGER_TIP].y * image_height})\n' +\
-                #     f'RING finger tip coordinates: (' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP].x * image_width}, ' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.RING_FINGER_TIP].y * image_height})\n' +\
-                #     f'PINKY tip coordinates: (' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP].x * image_width}, ' +\
-                #     f'{hand_landmarks.landmark[mp_hands.HandLandmark.PINKY_TIP].y * image_height})\n'
-
-            # y0, dy = int(image_height * 0.1), 15
-            # for i, line in enumerate(text.split('\n')):
-            #     cv2.putText(
-            #         img=image,
-            #         text=line,
-            #         org=(10, y0 + i * dy),
-            #         fontFace=cv2.FONT_HERSHEY_PLAIN,
-            #         fontScale=0.8,
-            #         color=(0x00, 0x00, 0xFF),
-            #         thickness=1
-            #     )
 
             # print(text)
 
