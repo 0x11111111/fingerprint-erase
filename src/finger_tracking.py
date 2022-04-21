@@ -8,8 +8,6 @@ import numpy as np
 from types import SimpleNamespace
 from google.protobuf.json_format import MessageToDict
 
-print('Start')
-
 debug_mode = SimpleNamespace(
     track_on=True,
     coordination_on=False,
@@ -22,7 +20,7 @@ debug_mode = SimpleNamespace(
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
-video_source = '../test/480P.flv'
+video_source = '../test/5.mp4'
 # video_source = 0
 cap = cv2.VideoCapture(video_source)
 
@@ -589,9 +587,7 @@ with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) a
                             y1 = int(close.landmark.__dict__[landmark_order[first]].y)
                             x2 = int(close.landmark.__dict__[landmark_order[second]].x)
                             y2 = int(close.landmark.__dict__[landmark_order[second]].y)
-                            print((xi, yi, ri), (x1, y1), (x2, y2))
                             intersect_res = intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
-                            print(intersect_res)
                             if intersect_res:
                                 distant.finger_status.__dict__[ki] = False
 
@@ -654,7 +650,7 @@ with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) a
         image_list.append(landmarks_sn)
         cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), landmarks_sn.image)
 
-        cv2.imshow('Hand Tracking', image)
+        cv2.imshow('Hand Tracking', landmarks_sn.image)
 
         if cv2.waitKey(10) & 0xFF == ord('q'):
             break
