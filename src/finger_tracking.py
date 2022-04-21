@@ -8,12 +8,23 @@ import numpy as np
 from types import SimpleNamespace
 from google.protobuf.json_format import MessageToDict
 
-debug_mode = SimpleNamespace(track_on=True, coordination_on=True, output_on=False, orientation_on=True)
+print('Start')
+
+debug_mode = SimpleNamespace(
+    track_on=True,
+    coordination_on=False,
+    output_on=False,
+    orientation_on=True,
+    frame_rate_on=True,
+    scoop_on=True
+)
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
-cap = cv2.VideoCapture(0)
+video_source = '../test/480P.flv'
+# video_source = 0
+cap = cv2.VideoCapture(video_source)
 
 if not os.path.exists("../.tmp"):
     os.mkdir("../.tmp")
@@ -39,7 +50,10 @@ finger_length_sn = SimpleNamespace(
 tip_dip_length_ratio = 0.8
 pinky_ring_width_ratio = 0.89
 thumb_width_length_ratio = 0.60
-finger_mcp_width_ratio = 0.8
+finger_mcp_width_ratio = 0.65
+prev_frame_time = 0
+curr_frame_time = 0
+landmark_order = 'abcdefghijklmnopqrstu'
 image_list = []
 
 
@@ -51,16 +65,79 @@ def calculate_distance_array(coord_array_1, coord_array_2):
     return math.sqrt((coord_array_1[0] - coord_array_2[0]) ** 2 + (coord_array_1[1] - coord_array_2[1]) ** 2)
 
 
-with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) as hands:
+# def intersect_line_circle(p, lsp, lep):
+#     # p is the circle parameter, lsp and lep is the two end of the line
+#     px, py, rr = p
+#     px1, py1 = lsp
+#     px2, py2 = lep
+#
+#     if px1 == px2:
+#         if abs(rr) >= abs(px1 - px):
+#             return True
+#         else:
+#             return False
+#
+#     else:
+#         slope = (py1 - py2) / (px1 - px2)
+#         b0 = py1 - slope * px1
+#         a = slope ** 2 + 1
+#         b = 2 * slope * (b0 - py) - 2 * px
+#         c = (b0 - py) ** 2 + px ** 2 - rr ** 2
+#         delta = b ** 2 - 4 * a * c
+#         if delta >= 0:
+#             return True
+#         else:
+#             return False
+
+def intersect_line_circle(circle_center, circle_radius, pt1, pt2, full_line=False, tangent_tol=1e-9):
+    """ Find the points at which a circle intersects a line-segment.  This can happen at 0, 1, or 2 points.
+
+    :param circle_center: The (x, y) location of the circle center
+    :param circle_radius: The radius of the circle
+    :param pt1: The (x, y) location of the first point of the segment
+    :param pt2: The (x, y) location of the second point of the segment
+    :param full_line: True to find intersections along full line - not just in the segment.  False will just return intersections within the segment.
+    :param tangent_tol: Numerical tolerance at which we decide the intersections are close enough to consider it a tangent
+    :return Sequence[Tuple[float, float]]: A list of length 0, 1, or 2, where each element is a point at which the circle intercepts a line segment.
+
+    """
+
+    (p1x, p1y), (p2x, p2y), (cx, cy) = pt1, pt2, circle_center
+    (x1, y1), (x2, y2) = (p1x - cx, p1y - cy), (p2x - cx, p2y - cy)
+    dx, dy = (x2 - x1), (y2 - y1)
+    dr = (dx ** 2 + dy ** 2) ** .5
+    big_d = x1 * y2 - x2 * y1
+    discriminant = circle_radius ** 2 * dr ** 2 - big_d ** 2
+
+    if discriminant < 0:  # No intersection between circle and line
+        return []
+    else:  # There may be 0, 1, or 2 intersections with the segment
+        intersections = [
+            (cx + (big_d * dy + sign * (-1 if dy < 0 else 1) * dx * discriminant ** .5) / dr ** 2,
+             cy + (-big_d * dx + sign * abs(dy) * discriminant ** .5) / dr ** 2)
+            for sign in ((1, -1) if dy < 0 else (-1, 1))
+        ]  # This makes sure the order along the segment is correct
+        if not full_line:  # If only considering the segment, filter out intersections that do not fall within the segment
+            fraction_along_segment = [(xi - p1x) / dx if abs(dx) > abs(dy) else (yi - p1y) / dy for xi, yi in
+                                      intersections]
+            intersections = [pt for pt, frac in zip(intersections, fraction_along_segment) if 0 <= frac <= 1]
+        if len(intersections) == 2 and abs(
+                discriminant) <= tangent_tol:  # If line is tangent to circle, return just one point (as both intersections have same location)
+            return [intersections[0]]
+        else:
+            return intersections
+
+
+with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
     while cap.isOpened():
         success, frame = cap.read()
 
         if not success:
-            print("Ignoring")
-            continue
+            break
 
         image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        image = cv2.flip(image, 1)
+        if isinstance(video_source, int):
+            image = cv2.flip(image, 1)
         image.flags.writeable = False
         results = hands.process(image)
         image.flags.writeable = True
@@ -83,17 +160,12 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                     mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
                 )
 
-            hand_landmarks_SimpleNamespace = SimpleNamespace(
+            landmarks_sn = SimpleNamespace(
                 timestamp=int(round(time.time() * 1000)),
-                hand_landmarks_list=[],
+                landmarks_list=[],
             )
 
-            # for idx, hand_world_landmarks in enumerate(results.multi_hand_world_landmarks):
-            #     # print(hand_world_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP].x)
-            #     # print(hand_world_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP].y)
-            #     print(hand_world_landmarks.landmark[mp_hands.HandLandmark.THUMB_TIP].z)
-
-            y0, dy = int(image_height * 0.1), 15
+            yy, dy = int(image_height * 0.1), 15
             for idx, hand_landmarks in enumerate(results.multi_hand_landmarks):
                 # print('hand_landmarks:', hand_landmarks)
                 landmarks = SimpleNamespace(
@@ -220,7 +292,6 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                                 z=hand_landmarks.landmark[17].z
                             )
                         ),
-
                     ),
 
                     finger_status=SimpleNamespace(
@@ -231,6 +302,43 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                         pinky=True
                     )
                 )
+
+                landmarks.landmark = SimpleNamespace(
+                    a=landmarks.wrist,
+
+                    b=landmarks.fingers.thumb.cmc,
+                    c=landmarks.fingers.thumb.mcp,
+                    d=landmarks.fingers.thumb.ip,
+                    e=landmarks.fingers.thumb.tip,
+
+                    f=landmarks.fingers.index.mcp,
+                    g=landmarks.fingers.index.pip,
+                    h=landmarks.fingers.index.dip,
+                    i=landmarks.fingers.index.tip,
+
+                    j=landmarks.fingers.middle.mcp,
+                    k=landmarks.fingers.middle.pip,
+                    l=landmarks.fingers.middle.dip,
+                    m=landmarks.fingers.middle.tip,
+
+                    n=landmarks.fingers.ring.mcp,
+                    o=landmarks.fingers.ring.pip,
+                    p=landmarks.fingers.ring.dip,
+                    q=landmarks.fingers.ring.tip,
+
+                    r=landmarks.fingers.pinky.mcp,
+                    s=landmarks.fingers.pinky.pip,
+                    t=landmarks.fingers.pinky.dip,
+                    u=landmarks.fingers.pinky.tip
+                )
+
+                # Assign an alias for thumb.ip
+                landmarks.fingers.thumb.dip = SimpleNamespace(
+                    x=landmarks.fingers.thumb.ip.x,
+                    y=landmarks.fingers.thumb.ip.y,
+                    z=landmarks.fingers.thumb.ip.z
+                )
+
                 landmarks.mcp_width = SimpleNamespace(
                     index_middle=calculate_distance_sn(landmarks.fingers.index.mcp,
                                                        landmarks.fingers.middle.mcp),
@@ -238,8 +346,8 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                     ring_pinky=calculate_distance_sn(landmarks.fingers.ring.mcp, landmarks.fingers.pinky.mcp)
                 )
 
-                landmarks.palm_width = landmarks.mcp_width.index_middle + landmarks.mcp_width.middle_ring + \
-                    landmarks.mcp_width.ring_pinky
+                landmarks.fingertip_distance_aggregated = landmarks.mcp_width.index_middle + \
+                    landmarks.mcp_width.middle_ring + landmarks.mcp_width.ring_pinky
 
                 landmarks.fingertip_major_axes = SimpleNamespace(
                     thumb=calculate_distance_sn(
@@ -252,12 +360,9 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                     pinky=landmarks.mcp_width.ring_pinky / 2 * pinky_ring_width_ratio * finger_mcp_width_ratio
                 )
 
-                wrist = np.array([landmarks.wrist.x,
-                                  landmarks.wrist.y])
-                thumb_cmc = np.array([landmarks.fingers.thumb.cmc.x,
-                                      landmarks.fingers.thumb.cmc.y])
-                pinky_mcp = np.array([landmarks.fingers.pinky.mcp.x,
-                                      landmarks.fingers.pinky.mcp.y])
+                wrist = np.array([landmarks.wrist.x, landmarks.wrist.y])
+                thumb_cmc = np.array([landmarks.fingers.thumb.cmc.x, landmarks.fingers.thumb.cmc.y])
+                pinky_mcp = np.array([landmarks.fingers.pinky.mcp.x, landmarks.fingers.pinky.mcp.y])
 
                 thumb_cmc_wrist_deg = np.rad2deg(np.arctan2(thumb_cmc[1] - wrist[1], thumb_cmc[0] - wrist[0]))
                 pinky_mcp_wrist_deg = np.rad2deg(np.arctan2(pinky_mcp[1] - wrist[1], pinky_mcp[0] - wrist[0]))
@@ -302,11 +407,11 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                 pinky_tip_dip_distance = calculate_distance_array(pinky_tip, pinky_dip)
 
                 landmarks.fingertip_minor_axes = SimpleNamespace(
-                    thumb=(1 + thumb_tip_ip_distance / finger_length_sn.thumb / tip_dip_length_ratio) * 0.4 * landmarks.fingertip_major_axes.thumb,
-                    index=(1 + index_tip_dip_distance / finger_length_sn.index / tip_dip_length_ratio) * 0.4 * landmarks.fingertip_major_axes.index,
-                    middle=(1 + middle_tip_dip_distance / finger_length_sn.middle / tip_dip_length_ratio) * 0.4 * landmarks.fingertip_major_axes.middle,
-                    ring=(1 + ring_tip_dip_distance / finger_length_sn.ring / tip_dip_length_ratio) * 0.4 * landmarks.fingertip_major_axes.ring,
-                    pinky=(1 + pinky_tip_dip_distance / finger_length_sn.pinky / tip_dip_length_ratio) * 0.4 * landmarks.fingertip_major_axes.pinky
+                    thumb=(landmarks.fingertip_major_axes.thumb + thumb_tip_ip_distance) * 0.5,
+                    index=(landmarks.fingertip_major_axes.index + index_tip_dip_distance) * 0.5,
+                    middle=(landmarks.fingertip_major_axes.middle + middle_tip_dip_distance) * 0.5,
+                    ring=(landmarks.fingertip_major_axes.ring + ring_tip_dip_distance) * 0.5,
+                    pinky=(landmarks.fingertip_major_axes.pinky + pinky_tip_dip_distance) * 0.5
                 )
 
                 landmarks.fingertip_angle = SimpleNamespace(
@@ -337,66 +442,6 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                         if v < wrist_cmp_distance[k]:
                             landmarks.finger_status.__dict__[k] = False
 
-                for k, v in landmarks.fingers.__dict__.items():
-                    # radius = int(landmarks.fingertip_major_axes.__dict__[k])
-                    center = (int(v.tip.x), int(v.tip.y))
-                    major_axe = int(landmarks.fingertip_major_axes.__dict__[k])
-                    minor_axe = int(landmarks.fingertip_minor_axes.__dict__[k])
-                    angle = landmarks.fingertip_angle.__dict__[k]
-
-                    if debug_mode.track_on:
-                        text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
-                        cv2.putText(
-                            img=image,
-                            text=text,
-                            org=(center[0] + 10, center[1] + 10),
-                            fontFace=cv2.FONT_HERSHEY_PLAIN,
-                            fontScale=1,
-                            color=(0x00, 0x00, 0xFF),
-                            thickness=1
-                        )
-
-                        if landmarks.finger_status.__dict__[k]:
-                            cv2.ellipse(
-                                img=image,
-                                center=center,
-                                axes=(major_axe, minor_axe),
-                                angle=angle,
-                                startAngle=0,
-                                endAngle=360,
-                                color=(0x00, 0xFF, 0x00),
-                                thickness=2
-                            )
-                        else:
-                            cv2.ellipse(
-                                img=image,
-                                center=center,
-                                axes=(major_axe, minor_axe),
-                                angle=angle,
-                                startAngle=0,
-                                endAngle=360,
-                                color=(0x00, 0x00, 0xFF),
-                                thickness=2
-                            )
-
-                    # if debug_mode.track_on:
-                    #     if landmarks.finger_status.__dict__[k]:
-                    #         cv2.circle(
-                    #             img=image,
-                    #             center=center,
-                    #             radius=radius,
-                    #             color=(0x00, 0xFF, 0x00),
-                    #             thickness=2
-                    #         )
-                    #     else:
-                    #         cv2.circle(
-                    #             img=image,
-                    #             center=center,
-                    #             radius=radius,
-                    #             color=(0x00, 0x00, 0xFF),
-                    #             thickness=2
-                    #         )
-
                 if debug_mode.orientation_on:
                     coord1 = (int(wrist[0]) + 10, int(wrist[1]))
                     text = 'orientation: {} angle: {}'.format(
@@ -412,7 +457,7 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                         thickness=1
                     )
 
-                    coord2 = (int(wrist[0]) + 10, int(wrist[1]) + 10)
+                    coord2 = (int(wrist[0]) + 10, int(wrist[1]) + 15)
                     text = 't_w: {} p_w: {}'.format(
                         thumb_cmc_wrist_deg, pinky_mcp_wrist_deg
                     )
@@ -429,34 +474,186 @@ with mp_hands.Hands(min_detection_confidence=0.4, min_tracking_confidence=0.3) a
                 if debug_mode.coordination_on:
                     text = f'handedness: {landmarks.handedness}\n'
                     for k, v in landmarks.fingers.__dict__.items():
-                        text += \
-                            '{} tip: ({:.3f}, {:.3f}, {:.6f})\n'.format(k, v.tip.x, v.tip.y, v.tip.z)
+                        text += '{} tip: ({:.3f}, {:.3f}, {:.6f})\n'.format(k, v.tip.x, v.tip.y, v.tip.z)
 
                     for i, line in enumerate(text.split('\n')):
                         cv2.putText(
                             img=image,
                             text=line,
-                            org=(10, y0),
+                            org=(10, yy),
                             fontFace=cv2.FONT_HERSHEY_PLAIN,
                             fontScale=1,
                             color=(0x00, 0x00, 0xFF),
                             thickness=1
                         )
-                        y0 += dy
+                        yy += dy
 
-                hand_landmarks_SimpleNamespace.hand_landmarks_list.append(landmarks)
+                landmarks_sn.landmarks_list.append(landmarks)
 
-            hand_landmarks_SimpleNamespace.image = copy.deepcopy(image)
+            landmarks_sn.image = copy.deepcopy(image)
 
         else:
-            hand_landmarks_SimpleNamespace = SimpleNamespace(
+            landmarks_sn = SimpleNamespace(
                 timestamp=int(round(time.time() * 1000)),
-                hand_landmarks_list=[],
+                landmarks_list=[],
                 image=image
             )
 
-        image_list.append(hand_landmarks_SimpleNamespace)
-        cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(hand_landmarks_SimpleNamespace.timestamp)), image)
+        if landmarks_sn.landmarks_list:
+            # hand occlusion detection
+            ls = landmarks_sn.landmarks_list
+            if len(ls) > 1:
+                if ls[0].fingertip_distance_aggregated > ls[1].fingertip_distance_aggregated:
+                    close, distant = ls[0], ls[1]
+                else:
+                    close, distant = ls[1], ls[0]
+
+                # Avoid detection out of frame
+                close_x0 = distant_x0 = image_width * 2
+                close_y0 = distant_y0 = image_height * 2
+                close_x1 = distant_x1 = -image_width
+                close_y1 = distant_y1 = -image_height
+                for i in landmark_order:
+                    if close.landmark.__dict__[i].x < close_x0:
+                        close_x0 = close.landmark.__dict__[i].x
+                    if close.landmark.__dict__[i].x > close_x1:
+                        close_x1 = close.landmark.__dict__[i].x
+                    if close.landmark.__dict__[i].y < close_y0:
+                        close_y0 = close.landmark.__dict__[i].y
+                    if close.landmark.__dict__[i].y > close_y1:
+                        close_y1 = close.landmark.__dict__[i].y
+
+                    if distant.landmark.__dict__[i].x < distant_x0:
+                        distant_x0 = distant.landmark.__dict__[i].x
+                    if distant.landmark.__dict__[i].x > distant_x1:
+                        distant_x1 = distant.landmark.__dict__[i].x
+                    if distant.landmark.__dict__[i].y < distant_y0:
+                        distant_y0 = distant.landmark.__dict__[i].y
+                    if distant.landmark.__dict__[i].y > distant_y1:
+                        distant_y1 = distant.landmark.__dict__[i].y
+
+                if debug_mode.scoop_on:
+                    cv2.putText(
+                        img=image,
+                        text='Close',
+                        org=(int(close_x0) + 10, int(close_y0) + 10),
+                        fontFace=cv2.FONT_HERSHEY_PLAIN,
+                        fontScale=1,
+                        color=(0x00, 0x00, 0xFF),
+                        thickness=1
+                    )
+                    cv2.rectangle(
+                        img=image,
+                        pt1=(int(close_x0), int(close_y0)),
+                        pt2=(int(close_x1), int(close_y1)),
+                        color=(0x00, 0xFF, 0x00)
+                    )
+
+                    cv2.putText(
+                        img=image,
+                        text='Distant',
+                        org=(int(distant_x0) + 10, int(distant_y0) + 10),
+                        fontFace=cv2.FONT_HERSHEY_PLAIN,
+                        fontScale=1,
+                        color=(0x00, 0x00, 0xFF),
+                        thickness=1
+                    )
+                    cv2.rectangle(
+                        img=image,
+                        pt1=(int(distant_x0), int(distant_y0)),
+                        pt2=(int(distant_x1), int(distant_y1)),
+                        color=(0x00, 0xFF, 0x00)
+                    )
+
+                if not (close_x0 > distant_x1 or close_x1 < distant_x0
+                        or close_y0 > distant_y1 or close_y1 < distant_y0):
+
+                    connections_number = set(mp_hands.HAND_CONNECTIONS)
+                    connections_number.add((0, 9))
+                    connections_number.add((0, 13))
+                    connections_number.add((1, 5))
+                    connections_number.add((2, 5))
+
+                    for ki, vi in distant.fingers.__dict__.items():
+                        k_coord = np.array([int(vi.tip.x * 0.7 + vi.dip.x * 0.3), int(vi.tip.y * 0.7 + vi.dip.y * 0.3)])
+                        xi, yi = int(vi.tip.x * 0.7 + vi.dip.x * 0.3), int(vi.tip.y * 0.7 + vi.dip.y * 0.3)
+                        ri = int(distant.fingertip_major_axes.__dict__[ki] * 2.5)
+
+                        # for kj, vj in close.landmark.__dict__.items():
+                        #     if ri >= calculate_distance_array(k_coord, np.array([int(vj.x), int(vj.y)])):
+                        #         print('occlusion')
+                        #         distant.finger_status.__dict__[ki] = False
+
+                        for first, second in connections_number:
+                            x1 = int(close.landmark.__dict__[landmark_order[first]].x)
+                            y1 = int(close.landmark.__dict__[landmark_order[first]].y)
+                            x2 = int(close.landmark.__dict__[landmark_order[second]].x)
+                            y2 = int(close.landmark.__dict__[landmark_order[second]].y)
+                            print((xi, yi, ri), (x1, y1), (x2, y2))
+                            intersect_res = intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
+                            print(intersect_res)
+                            if intersect_res:
+                                distant.finger_status.__dict__[ki] = False
+
+        for landmark in landmarks_sn.landmarks_list:
+            for k, v in landmark.fingers.__dict__.items():
+                center = (int(v.tip.x * 0.7 + v.dip.x * 0.3), int(v.tip.y * 0.7 + v.dip.y * 0.3))
+                major_axe = int(landmark.fingertip_major_axes.__dict__[k])
+                minor_axe = int(landmark.fingertip_minor_axes.__dict__[k])
+                angle = landmark.fingertip_angle.__dict__[k]
+
+                if debug_mode.track_on:
+                    # text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
+                    # cv2.putText(
+                    #     img=image,
+                    #     text=text,
+                    #     org=(center[0] + 10, center[1] + 10),
+                    #     fontFace=cv2.FONT_HERSHEY_PLAIN,
+                    #     fontScale=1,
+                    #     color=(0x00, 0x00, 0xFF),
+                    #     thickness=1
+                    # )
+
+                    if landmark.finger_status.__dict__[k]:
+                        cv2.ellipse(
+                            img=landmarks_sn.image,
+                            center=center,
+                            axes=(major_axe, minor_axe),
+                            angle=angle,
+                            startAngle=0,
+                            endAngle=360,
+                            color=(0x00, 0xFF, 0x00),
+                            thickness=2
+                        )
+                    else:
+                        cv2.ellipse(
+                            img=landmarks_sn.image,
+                            center=center,
+                            axes=(major_axe, minor_axe),
+                            angle=angle,
+                            startAngle=0,
+                            endAngle=360,
+                            color=(0x00, 0x00, 0xFF),
+                            thickness=2
+                        )
+
+        if debug_mode.frame_rate_on:
+            curr_frame_time = time.time()
+            fps = int(1 / (curr_frame_time - prev_frame_time))
+            prev_frame_time = curr_frame_time
+            cv2.putText(
+                img=landmarks_sn.image,
+                text='{} FPS'.format(fps),
+                org=(10, 10),
+                fontFace=cv2.FONT_HERSHEY_PLAIN,
+                fontScale=1,
+                color=(0x00, 0xFF, 0x00),
+                thickness=1
+            )
+
+        image_list.append(landmarks_sn)
+        cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), landmarks_sn.image)
+
         cv2.imshow('Hand Tracking', image)
 
         if cv2.waitKey(10) & 0xFF == ord('q'):
