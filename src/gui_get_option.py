@@ -5,19 +5,25 @@ from PIL import Image
 from pathlib import Path
 
 
-def file_read():
+def get_option():
     """
-        Select a file to read
+        Get options from user.
     """
     file_path = ""
     # GUI layout
     layout = [
         [
-            sg.FileBrowse(key="file"),
+            sg.FileBrowse(key="file_path"),
             sg.Text("File"),
             sg.InputText()
         ],
-        [sg.Submit(key="submit"), sg.Cancel("Exit")]
+        [sg.Submit(key="submit"), sg.Cancel("Exit")],
+        [sg.Slider(key='blur_value', range=(1, 31), default_value=7, size=(20, 15), orientation='horizontal')],
+        [
+            sg.Radio(key='normalization', text='归一化平滑', group_id='Blur_option', default=True),
+            sg.Radio(key='gaussian', text='高斯平滑', group_id='Blur_option'),
+            sg.Radio(key='nope', text='不处理', group_id='Blur_option')
+        ]
     ]
     # WINDOW generation
     window = sg.Window("File selection", layout)
@@ -35,4 +41,9 @@ def file_read():
                 file_path = values[0]
                 break
     window.close()
-    return file_path
+    return values
+
+
+if __name__ == "__main__":
+    option = get_option()
+    print(option)

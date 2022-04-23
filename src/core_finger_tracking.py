@@ -5,7 +5,8 @@ import time
 import math
 import numpy as np
 from types import SimpleNamespace
-from file_selection_gui import file_read
+from gui_get_option import get_option
+
 
 def calculate_distance_sn(coord_sn_1, coord_sn_2):
     return math.sqrt((coord_sn_1.x - coord_sn_2.x) ** 2 + (coord_sn_1.y - coord_sn_2.y) ** 2)
@@ -499,17 +500,15 @@ def generate_mask(_image_height, _image_width, _center, _angle, _major_axe, _min
     return mask
 
 
-def process_fingertip(_landmarks_sn):
+def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
     _image = _landmarks_sn.image
-    blur_mode = debug_mode.blur_on
     image_height, image_width, _ = _image.shape
     mask_image = np.ones(_image.shape, _image.dtype)
-    kernel_size = 11
-    if blur_mode == 1:
-        blur_source_image = cv2.blur(_image, (kernel_size, kernel_size))
+    if _blur_mode == 1:
+        blur_source_image = cv2.blur(_image, (_kernel_size, _kernel_size))
 
-    elif blur_mode == 2:
-        blur_source_image = cv2.GaussianBlur(_image, (kernel_size, kernel_size), 0)
+    elif _blur_mode == 2:
+        blur_source_image = cv2.GaussianBlur(_image, (_kernel_size, _kernel_size), 0)
 
     else:
         blur_source_image = None
@@ -546,7 +545,7 @@ def process_fingertip(_landmarks_sn):
                         thickness=2
                     )
 
-                if blur_source_image is not None and blur_mode == 1 or blur_mode == 2:
+                if blur_source_image is not None and _blur_mode == 1 or _blur_mode == 2:
                     mask = generate_mask(
                         _image_height=image_height,
                         _image_width=image_width,
@@ -576,7 +575,8 @@ def process_fingertip(_landmarks_sn):
         _landmarks_sn.image = _image
 
 
-def fingerprint_erase(file_path):
+def fingerprint_erase(file_path, _blur_mode, kernel_size):
+    interruption_flag = False
     prev_frame_time = 0
     curr_frame_time = 0
 
@@ -629,7 +629,7 @@ def fingerprint_erase(file_path):
                     image=image
                 )
 
-            process_fingertip(landmarks_sn)
+            process_fingertip(landmarks_sn, _blur_mode, kernel_size)
 
             if debug_mode.frame_rate_on:
                 curr_frame_time = time.time()
@@ -651,10 +651,14 @@ def fingerprint_erase(file_path):
             cv2.imshow('Hand Tracking', processed_image)
 
             if cv2.waitKey(10) & 0xFF == ord('q'):
+                interruption_flag = True
                 break
 
     cap.release()
     cv2.destroyAllWindows()
+
+    if interruption_flag:
+        return None
 
     return folder
 
@@ -668,7 +672,6 @@ if __name__ == '__main__':
         orientation_on=False,
         frame_rate_on=True,
         scoop_on=False,
-        blur_on=2
     )
 
     mp_drawing = mp.solutions.drawing_utils
@@ -703,6 +706,20 @@ if __name__ == '__main__':
     landmark_order = 'abcdefghijklmnopqrstu'
     image_list = []
 
-    file_path = file_read()
-    temp_file_path = fingerprint_erase(file_path)
-    print(temp_file_path)
+    selection = get_option()
+    # Kernel size of Gaussian should be odd only
+    blur_value = int(selection['blur_value'] // 2 * 2 + 1)
+
+    blur_mode = 0
+    if selection['normalization']:
+        blur_mode = 1
+    elif selection['gaussian']:
+        blur_mode = 2
+
+    processed_path = fingerprint_erase(
+        file_path=selection['file_path'],
+        _blur_mode=blur_mode,
+        kernel_size=blur_value
+    )
+    print(processed_path)
+
