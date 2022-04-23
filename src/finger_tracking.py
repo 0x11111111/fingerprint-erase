@@ -5,55 +5,7 @@ import time
 import math
 import numpy as np
 from types import SimpleNamespace
-
-debug_mode = SimpleNamespace(
-    circle_on=False,
-    landmark_on=False,
-    coordination_on=False,
-    output_on=False,
-    orientation_on=False,
-    frame_rate_on=True,
-    scoop_on=False,
-    blur_on=1
-)
-
-mp_drawing = mp.solutions.drawing_utils
-mp_hands = mp.solutions.hands
-
-video_source = '../test/6.mp4'
-# video_source = 0
-cap = cv2.VideoCapture(video_source)
-
-if not os.path.exists("../.tmp"):
-    os.mkdir("../.tmp")
-
-folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
-os.mkdir(folder)
-
-EPS = 0.0001
-fingertip_radius_sn = SimpleNamespace(
-    thumb=20.0,
-    index=18.4,
-    middle=18.3,
-    ring=17.3,
-    pinky=15.3
-)
-finger_length_sn = SimpleNamespace(
-    thumb=32.1,
-    index=24.7,
-    middle=26.4,
-    ring=26.3,
-    pinky=23.7
-)
-tip_dip_length_ratio = 0.8
-pinky_ring_width_ratio = 0.89
-thumb_width_length_ratio = 0.60
-finger_mcp_width_ratio = 0.65
-prev_frame_time = 0
-curr_frame_time = 0
-landmark_order = 'abcdefghijklmnopqrstu'
-image_list = []
-
+from file_selection_gui import file_read
 
 def calculate_distance_sn(coord_sn_1, coord_sn_2):
     return math.sqrt((coord_sn_1.x - coord_sn_2.x) ** 2 + (coord_sn_1.y - coord_sn_2.y) ** 2)
@@ -351,7 +303,7 @@ def preprocess(_landmarks_sn, res, _image):
 
             for i, line in enumerate(_text.split('\n')):
                 cv2.putText(
-                    img=image,
+                    img=_image,
                     text=line,
                     org=(10, _yy),
                     fontFace=cv2.FONT_HERSHEY_PLAIN,
@@ -361,7 +313,7 @@ def preprocess(_landmarks_sn, res, _image):
                 )
                 _yy += _dy
 
-    _landmarks_sn.image = image
+    _landmarks_sn.image = _image
 
 
 def detect_orientation(_landmarks_sn):
@@ -547,12 +499,12 @@ def generate_mask(_image_height, _image_width, _center, _angle, _major_axe, _min
     return mask
 
 
-def generate_mosaic(_image, _center, _angle, _major_axe, _minor_axe):
+def process_fingertip(_landmarks_sn):
+    _image = _landmarks_sn.image
     blur_mode = debug_mode.blur_on
     image_height, image_width, _ = _image.shape
-    mask_image = np.ones(_image.shape, np.int8)
-    kernel_size = 21
-
+    mask_image = np.ones(_image.shape, _image.dtype)
+    kernel_size = 11
     if blur_mode == 1:
         blur_source_image = cv2.blur(_image, (kernel_size, kernel_size))
 
@@ -562,25 +514,6 @@ def generate_mosaic(_image, _center, _angle, _major_axe, _minor_axe):
     else:
         blur_source_image = None
 
-    if blur_source_image is not None and blur_mode == 1 or blur_mode == 2:
-        mask = generate_mask(
-            _image_height=image_height,
-            _image_width=image_width,
-            _center=_center,
-            _angle=_angle,
-            _major_axe=_major_axe,
-            _minor_axe=_minor_axe
-        )
-        mask_image[mask] = [0, 0, 0]
-
-        mask_image_reverse = np.ones(image.shape, np.int8) - mask_image
-        blurred_image = mask_image * _image + mask_image_reverse * blur_source_image
-        return blurred_image
-
-    return _image
-
-
-def process_fingertip(_landmarks_sn):
     for _landmark in _landmarks_sn.landmarks_list:
         for k, v in _landmark.fingers.__dict__.items():
             center = (int(v.tip.x * 0.7 + v.dip.x * 0.3), int(v.tip.y * 0.7 + v.dip.y * 0.3))
@@ -591,7 +524,7 @@ def process_fingertip(_landmarks_sn):
             if debug_mode.output_on:
                 _text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
                 cv2.putText(
-                    img=_landmarks_sn.image,
+                    img=_image,
                     text=_text,
                     org=(center[0] + 10, center[1] + 10),
                     fontFace=cv2.FONT_HERSHEY_PLAIN,
@@ -603,7 +536,7 @@ def process_fingertip(_landmarks_sn):
             if _landmark.finger_status.__dict__[k]:
                 if debug_mode.circle_on:
                     cv2.ellipse(
-                        img=_landmarks_sn.image,
+                        img=_image,
                         center=center,
                         axes=(major_axe, minor_axe),
                         angle=angle,
@@ -613,18 +546,21 @@ def process_fingertip(_landmarks_sn):
                         thickness=2
                     )
 
-                _landmarks_sn.image = generate_mosaic(
-                    _image=_landmarks_sn.image,
-                    _center=center,
-                    _angle=angle,
-                    _major_axe=major_axe,
-                    _minor_axe=minor_axe
-                )
+                if blur_source_image is not None and blur_mode == 1 or blur_mode == 2:
+                    mask = generate_mask(
+                        _image_height=image_height,
+                        _image_width=image_width,
+                        _center=center,
+                        _angle=angle,
+                        _major_axe=major_axe,
+                        _minor_axe=minor_axe
+                    )
+                    mask_image[mask] = [0, 0, 0]
 
             else:
                 if debug_mode.circle_on:
                     cv2.ellipse(
-                        img=_landmarks_sn.image,
+                        img=_image,
                         center=center,
                         axes=(major_axe, minor_axe),
                         angle=angle,
@@ -633,73 +569,140 @@ def process_fingertip(_landmarks_sn):
                         color=(0x00, 0x00, 0xFF),
                         thickness=2
                     )
+    if mask_image is not None and mask_image is not None and blur_source_image is not None:
+        mask_image_reverse = np.ones(_image.shape, _image.dtype) - mask_image
+        _landmarks_sn.image = mask_image * _image + mask_image_reverse * blur_source_image
+    else:
+        _landmarks_sn.image = _image
 
 
-with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
-    while cap.isOpened():
-        success, frame = cap.read()
+def fingerprint_erase(file_path):
+    prev_frame_time = 0
+    curr_frame_time = 0
 
-        if not success:
-            break
+    video_source = file_path
+    # video_source = 0
+    cap = cv2.VideoCapture(video_source)
 
-        image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        if isinstance(video_source, int):
-            image = cv2.flip(image, 1)
-        image.flags.writeable = False
-        results = hands.process(image)
-        image.flags.writeable = True
-        image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
+        while cap.isOpened():
+            success, frame = cap.read()
 
-        # Rendering results
-        if results.multi_hand_landmarks:
-            if debug_mode.landmark_on:
-                for num, hand in enumerate(results.multi_hand_landmarks):
-                    mp_drawing.draw_landmarks(
-                        image, hand, mp_hands.HAND_CONNECTIONS,
-                        mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                        mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
-                    )
+            if not success:
+                break
 
-            landmarks_sn = SimpleNamespace(
-                timestamp=int(round(time.time() * 1000)),
-            )
+            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            preprocess(landmarks_sn, results, image)
+            if isinstance(video_source, int):
+                image = cv2.flip(image, 1)
+            image.flags.writeable = False
+            results = hands.process(image)
+            image.flags.writeable = True
+            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-            detect_orientation(landmarks_sn)
+            # Rendering results
+            if results.multi_hand_landmarks:
+                if debug_mode.landmark_on:
+                    for num, hand in enumerate(results.multi_hand_landmarks):
+                        mp_drawing.draw_landmarks(
+                            image, hand, mp_hands.HAND_CONNECTIONS,
+                            mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
+                            mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
+                        )
 
-            detect_finger_self_occlusion(landmarks_sn)
+                landmarks_sn = SimpleNamespace(
+                    timestamp=int(round(time.time() * 1000)),
+                )
 
-            detect_palm_occlusion(landmarks_sn)
+                preprocess(landmarks_sn, results, image)
 
-        else:
-            landmarks_sn = SimpleNamespace(
-                timestamp=int(round(time.time() * 1000)),
-                landmarks_list=[],
-                image=image
-            )
+                detect_orientation(landmarks_sn)
 
-        process_fingertip(landmarks_sn)
+                detect_finger_self_occlusion(landmarks_sn)
 
-        if debug_mode.frame_rate_on:
-            curr_frame_time = time.time()
-            fps = int(1 / (curr_frame_time - prev_frame_time))
-            prev_frame_time = curr_frame_time
-            cv2.putText(
-                img=landmarks_sn.image,
-                text='{} FPS'.format(fps),
-                org=(10, 10),
-                fontFace=cv2.FONT_HERSHEY_PLAIN,
-                fontScale=1,
-                color=(0x00, 0xFF, 0x00),
-                thickness=2
-            )
+                detect_palm_occlusion(landmarks_sn)
 
-        cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), landmarks_sn.image)
-        cv2.imshow('Hand Tracking', landmarks_sn.image)
+            else:
+                landmarks_sn = SimpleNamespace(
+                    timestamp=int(round(time.time() * 1000)),
+                    landmarks_list=[],
+                    image=image
+                )
 
-        if cv2.waitKey(10) & 0xFF == ord('q'):
-            break
+            process_fingertip(landmarks_sn)
 
-cap.release()
-cv2.destroyAllWindows()
+            if debug_mode.frame_rate_on:
+                curr_frame_time = time.time()
+                fps = int(1 / (curr_frame_time - prev_frame_time))
+                prev_frame_time = curr_frame_time
+                cv2.putText(
+                    img=landmarks_sn.image,
+                    text='{} FPS'.format(fps),
+                    org=(10, 10),
+                    fontFace=cv2.FONT_HERSHEY_PLAIN,
+                    fontScale=1,
+                    color=(0x00, 0xFF, 0x00),
+                    thickness=2
+                )
+
+            # processed_image = cv2.cvtColor(landmarks_sn.image, cv2.CV_32S)
+            processed_image = landmarks_sn.image
+            cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
+            cv2.imshow('Hand Tracking', processed_image)
+
+            if cv2.waitKey(10) & 0xFF == ord('q'):
+                break
+
+    cap.release()
+    cv2.destroyAllWindows()
+
+    return folder
+
+
+if __name__ == '__main__':
+    debug_mode = SimpleNamespace(
+        circle_on=False,
+        landmark_on=False,
+        coordination_on=False,
+        output_on=False,
+        orientation_on=False,
+        frame_rate_on=True,
+        scoop_on=False,
+        blur_on=2
+    )
+
+    mp_drawing = mp.solutions.drawing_utils
+    mp_hands = mp.solutions.hands
+
+    if not os.path.exists("../.tmp"):
+        os.mkdir("../.tmp")
+
+    folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
+    os.mkdir(folder)
+
+    EPS = 0.0001
+    fingertip_radius_sn = SimpleNamespace(
+        thumb=20.0,
+        index=18.4,
+        middle=18.3,
+        ring=17.3,
+        pinky=15.3
+    )
+    finger_length_sn = SimpleNamespace(
+        thumb=32.1,
+        index=24.7,
+        middle=26.4,
+        ring=26.3,
+        pinky=23.7
+    )
+    tip_dip_length_ratio = 0.8
+    pinky_ring_width_ratio = 0.89
+    thumb_width_length_ratio = 0.60
+    finger_mcp_width_ratio = 0.65
+
+    landmark_order = 'abcdefghijklmnopqrstu'
+    image_list = []
+
+    file_path = file_read()
+    temp_file_path = fingerprint_erase(file_path)
+    print(temp_file_path)
