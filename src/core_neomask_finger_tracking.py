@@ -483,7 +483,13 @@ def detect_palm_occlusion(_landmarks_sn):
                     y1 = int(close.landmark.__dict__[landmark_order[first]].y)
                     x2 = int(close.landmark.__dict__[landmark_order[second]].x)
                     y2 = int(close.landmark.__dict__[landmark_order[second]].y)
-                    intersect_res = intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
+                    intersect_res = None
+                        if not (-EPS <= x1 - x2 <= EPS and -EPS <= y1 - y2 <= EPS):
+                            intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
+                        else:
+                            # Two points overlapping as one cannot discriminate one line.
+                            return (xi - x1) ** 2 + (yi - y1) ** 2 <= ri ** 2
+
                     if intersect_res:
                         distant.finger_status.__dict__[ki] = False
 
