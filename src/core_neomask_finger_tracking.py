@@ -4,14 +4,9 @@ import os
 import time
 import math
 import numpy as np
-import deprecated
 from types import SimpleNamespace
 from gui_get_option import get_option
-from __init__ import __version__
 
-@deprecated(
-    "Use core_neomask_finger_tracking instead."
-)
 
 def calculate_distance_sn(coord_sn_1, coord_sn_2):
     return math.sqrt((coord_sn_1.x - coord_sn_2.x) ** 2 + (coord_sn_1.y - coord_sn_2.y) ** 2)
@@ -493,22 +488,10 @@ def detect_palm_occlusion(_landmarks_sn):
                         distant.finger_status.__dict__[ki] = False
 
 
-def generate_mask(_image_height, _image_width, _center, _angle, _major_axe, _minor_axe):
-    y, x = np.ogrid[0: _image_height, 0: _image_width]
-    alpha = np.deg2rad(_angle)
-    x0, y0 = x - _center[0], y - _center[1]
-    sine = math.sin(alpha)
-    cosine = math.cos(alpha)
-    a, b = _major_axe, _minor_axe
-    mask = b * b * ((x0 * cosine + y0 * sine) ** 2) + a * a * ((x0 * sine - y0 * cosine) ** 2) <= a * a * b * b
-
-    return mask
-
-
 def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
     _image = _landmarks_sn.image
     image_height, image_width, _ = _image.shape
-    mask_image = np.ones(_image.shape, _image.dtype)
+    mask_image = np.zeros(_image.shape, _image.dtype)
     if _blur_mode == 1:
         blur_source_image = cv2.blur(_image, (_kernel_size, _kernel_size))
 
@@ -551,15 +534,16 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
                     )
 
                 if blur_source_image is not None and _blur_mode == 1 or _blur_mode == 2:
-                    mask = generate_mask(
-                        _image_height=image_height,
-                        _image_width=image_width,
-                        _center=center,
-                        _angle=angle,
-                        _major_axe=major_axe,
-                        _minor_axe=minor_axe
+                    cv2.ellipse(
+                        img=mask_image,
+                        center=center,
+                        axes=(major_axe, minor_axe),
+                        angle=angle,
+                        startAngle=0,
+                        endAngle=360,
+                        color=(0xFF, 0xFF, 0xFF),
+                        thickness=-1
                     )
-                    mask_image[mask] = [0, 0, 0]
 
             else:
                 if debug_mode.circle_on:
@@ -574,8 +558,7 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
                         thickness=2
                     )
     if mask_image is not None and blur_source_image is not None:
-        mask_image_reverse = np.ones(_image.shape, _image.dtype) - mask_image
-        _landmarks_sn.image = mask_image * _image + mask_image_reverse * blur_source_image
+        _landmarks_sn.image = np.where(mask_image > 0, blur_source_image, _image)
     else:
         _landmarks_sn.image = _image
 
@@ -650,8 +633,10 @@ def fingerprint_erase(file_path, _blur_mode, kernel_size):
                     thickness=2
                 )
 
-            cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), landmarks_sn.image)
-            cv2.imshow('Hand Tracking', landmarks_sn.image)
+            # processed_image = cv2.cvtColor(landmarks_sn.image, cv2.CV_32S)
+            processed_image = landmarks_sn.image
+            # cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
+            cv2.imshow('Hand Tracking', processed_image)
 
             if cv2.waitKey(10) & 0xFF == ord('q'):
                 interruption_flag = True
@@ -673,7 +658,7 @@ if __name__ == '__main__':
         coordination_on=False,
         output_on=False,
         orientation_on=False,
-        frame_rate_on=False,
+        frame_rate_on=True,
         scoop_on=False,
     )
 
