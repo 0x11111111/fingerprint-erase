@@ -635,7 +635,7 @@ def fingerprint_erase(file_path, _blur_mode, kernel_size):
 
             # processed_image = cv2.cvtColor(landmarks_sn.image, cv2.CV_32S)
             processed_image = landmarks_sn.image
-            # cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
+            cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
             cv2.imshow('Hand Tracking', processed_image)
 
             if cv2.waitKey(10) & 0xFF == ord('q'):
