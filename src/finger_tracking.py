@@ -7,20 +7,20 @@ import numpy as np
 from types import SimpleNamespace
 
 debug_mode = SimpleNamespace(
-    track_on=False,
+    circle_on=False,
     landmark_on=False,
     coordination_on=False,
     output_on=False,
     orientation_on=False,
     frame_rate_on=True,
     scoop_on=False,
-    blur_on=2
+    blur_on=1
 )
 
 mp_drawing = mp.solutions.drawing_utils
 mp_hands = mp.solutions.hands
 
-video_source = '../test/5.mp4'
+video_source = '../test/6.mp4'
 # video_source = 0
 cap = cv2.VideoCapture(video_source)
 
@@ -364,7 +364,7 @@ def preprocess(_landmarks_sn, res, _image):
     _landmarks_sn.image = image
 
 
-def fetch_orientation(_landmarks_sn):
+def detect_orientation(_landmarks_sn):
     for _landmarks in _landmarks_sn.landmarks_list:
 
         wrist = np.array([_landmarks.wrist.x, _landmarks.wrist.y])
@@ -422,7 +422,7 @@ def fetch_orientation(_landmarks_sn):
             )
 
 
-def fetch_finger_self_occlusion(_landmarks_sn):
+def detect_finger_self_occlusion(_landmarks_sn):
     for _landmarks in _landmarks_sn.landmarks_list:
         if _landmarks.orientation == 'Front':
             wrist_tip_distance = {
@@ -445,7 +445,7 @@ def fetch_finger_self_occlusion(_landmarks_sn):
                     _landmarks.finger_status.__dict__[k] = False
 
 
-def fetch_palm_occlusion(_landmarks_sn):
+def detect_palm_occlusion(_landmarks_sn):
     # hand occlusion detection
     height, width, _ = _landmarks_sn.image.shape
     ls = _landmarks_sn.landmarks_list
@@ -547,83 +547,92 @@ def generate_mask(_image_height, _image_width, _center, _angle, _major_axe, _min
     return mask
 
 
-def process_fingertip(_landmarks_sn):
+def generate_mosaic(_image, _center, _angle, _major_axe, _minor_axe):
     blur_mode = debug_mode.blur_on
-    blur_complete = False
-    if _landmarks_sn.landmarks_list:
-        _image = _landmarks_sn.image
-        image_height, image_width, _ = _image.shape
-        mask_image = np.ones(_image.shape, np.int8)
-        kernel_size = 35
+    image_height, image_width, _ = _image.shape
+    mask_image = np.ones(_image.shape, np.int8)
+    kernel_size = 21
 
-        if blur_mode == 1:
-            blur_source_image = cv2.blur(_image, (kernel_size, kernel_size))
+    if blur_mode == 1:
+        blur_source_image = cv2.blur(_image, (kernel_size, kernel_size))
 
-        elif blur_mode == 2:
-            blur_source_image = cv2.GaussianBlur(_image, (kernel_size, kernel_size), 0)
+    elif blur_mode == 2:
+        blur_source_image = cv2.GaussianBlur(_image, (kernel_size, kernel_size), 0)
 
-        else:
-            blur_source_image = None
+    else:
+        blur_source_image = None
 
-        for _landmark in _landmarks_sn.landmarks_list:
-            for k, v in _landmark.fingers.__dict__.items():
-                center = (int(v.tip.x * 0.7 + v.dip.x * 0.3), int(v.tip.y * 0.7 + v.dip.y * 0.3))
-                major_axe = int(_landmark.fingertip_major_axes.__dict__[k])
-                minor_axe = int(_landmark.fingertip_minor_axes.__dict__[k])
-                angle = _landmark.fingertip_angle.__dict__[k]
+    if blur_source_image is not None and blur_mode == 1 or blur_mode == 2:
+        mask = generate_mask(
+            _image_height=image_height,
+            _image_width=image_width,
+            _center=_center,
+            _angle=_angle,
+            _major_axe=_major_axe,
+            _minor_axe=_minor_axe
+        )
+        mask_image[mask] = [0, 0, 0]
 
-                if blur_mode == 1 or blur_mode == 2 and _landmark.finger_status.__dict__[k]:
-                    mask = generate_mask(
-                        _image_height=image_height,
-                        _image_width=image_width,
-                        _center=center,
-                        _angle=angle,
-                        _major_axe=major_axe,
-                        _minor_axe=minor_axe
-                    )
-                    mask_image[mask] = [0, 0, 0]
-                    blur_complete = True
+        mask_image_reverse = np.ones(image.shape, np.int8) - mask_image
+        blurred_image = mask_image * _image + mask_image_reverse * blur_source_image
+        return blurred_image
 
-                if debug_mode.track_on:
-                    _text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
-                    cv2.putText(
+    return _image
+
+
+def process_fingertip(_landmarks_sn):
+    for _landmark in _landmarks_sn.landmarks_list:
+        for k, v in _landmark.fingers.__dict__.items():
+            center = (int(v.tip.x * 0.7 + v.dip.x * 0.3), int(v.tip.y * 0.7 + v.dip.y * 0.3))
+            major_axe = int(_landmark.fingertip_major_axes.__dict__[k])
+            minor_axe = int(_landmark.fingertip_minor_axes.__dict__[k])
+            angle = _landmark.fingertip_angle.__dict__[k]
+
+            if debug_mode.output_on:
+                _text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
+                cv2.putText(
+                    img=_landmarks_sn.image,
+                    text=_text,
+                    org=(center[0] + 10, center[1] + 10),
+                    fontFace=cv2.FONT_HERSHEY_PLAIN,
+                    fontScale=1,
+                    color=(0x00, 0x00, 0xFF),
+                    thickness=1
+                )
+
+            if _landmark.finger_status.__dict__[k]:
+                if debug_mode.circle_on:
+                    cv2.ellipse(
                         img=_landmarks_sn.image,
-                        text=_text,
-                        org=(center[0] + 10, center[1] + 10),
-                        fontFace=cv2.FONT_HERSHEY_PLAIN,
-                        fontScale=1,
-                        color=(0x00, 0x00, 0xFF),
-                        thickness=1
+                        center=center,
+                        axes=(major_axe, minor_axe),
+                        angle=angle,
+                        startAngle=0,
+                        endAngle=360,
+                        color=(0x00, 0xFF, 0x00),
+                        thickness=2
                     )
 
-                    if _landmark.finger_status.__dict__[k]:
-                        cv2.ellipse(
-                            img=_landmarks_sn.image,
-                            center=center,
-                            axes=(major_axe, minor_axe),
-                            angle=angle,
-                            startAngle=0,
-                            endAngle=360,
-                            color=(0x00, 0xFF, 0x00),
-                            thickness=2
-                        )
+                _landmarks_sn.image = generate_mosaic(
+                    _image=_landmarks_sn.image,
+                    _center=center,
+                    _angle=angle,
+                    _major_axe=major_axe,
+                    _minor_axe=minor_axe
+                )
 
-                    else:
-                        cv2.ellipse(
-                            img=_landmarks_sn.image,
-                            center=center,
-                            axes=(major_axe, minor_axe),
-                            angle=angle,
-                            startAngle=0,
-                            endAngle=360,
-                            color=(0x00, 0x00, 0xFF),
-                            thickness=2
-                        )
-
-        if blur_mode == 1 or blur_mode == 2 and blur_complete:
-            mask_image_reverse = np.ones(image.shape, np.int8) - mask_image
-            _image = mask_image * _image + mask_image_reverse * blur_source_image
-            _landmarks_sn.image = _image
+            else:
+                if debug_mode.circle_on:
+                    cv2.ellipse(
+                        img=_landmarks_sn.image,
+                        center=center,
+                        axes=(major_axe, minor_axe),
+                        angle=angle,
+                        startAngle=0,
+                        endAngle=360,
+                        color=(0x00, 0x00, 0xFF),
+                        thickness=2
+                    )
 
 
 with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
@@ -657,11 +666,11 @@ with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) a
 
             preprocess(landmarks_sn, results, image)
 
-            fetch_orientation(landmarks_sn)
+            detect_orientation(landmarks_sn)
 
-            fetch_finger_self_occlusion(landmarks_sn)
+            detect_finger_self_occlusion(landmarks_sn)
 
-            fetch_palm_occlusion(landmarks_sn)
+            detect_palm_occlusion(landmarks_sn)
 
         else:
             landmarks_sn = SimpleNamespace(
