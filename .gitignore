@@ -130,3 +130,10 @@ config.yaml
 # Personal data
 *.csv
 .tmp/
+*.mp4
+*.avi
+*.jpeg
+*.jpg
+*.png
+*.wav
+*.json
