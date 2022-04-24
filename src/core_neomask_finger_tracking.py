@@ -582,12 +582,12 @@ def fingerprint_erase(_args, group_number):
         os.mkdir(temp_path)
     # video_source = 0
     cap = cv2.VideoCapture(video_source)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_jump_unit * group_number)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, args.frame_jump_unit * group_number)
     proc_frames = 0
 
     try:
         with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
-            while proc_frames < frame_jump_unit:
+            while proc_frames < args.frame_jump_unit:
                 success, frame = cap.read()
 
                 if not success:
@@ -726,7 +726,7 @@ if __name__ == '__main__':
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
     num_processes = mp.cpu_count()
-    frame_jump_unit = frame_count // num_processes
+    args.frame_jump_unit = frame_count // num_processes
 
     p = mp.Pool(num_processes)
     p.map(partial(fingerprint_erase, args), range(num_processes))
