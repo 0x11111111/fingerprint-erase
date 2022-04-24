@@ -571,6 +571,7 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
 
 
 def fingerprint_erase(group_number):
+    global args
     interruption_flag = False
     prev_frame_time = 0
     curr_frame_time = 0
