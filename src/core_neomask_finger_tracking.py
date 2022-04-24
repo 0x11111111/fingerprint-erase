@@ -1,11 +1,12 @@
 import cv2
 import os
 import time
+import mediapipe
 import math
+import json
 import numpy as np
 from types import SimpleNamespace
 
-from main import *
 
 def calculate_distance_sn(coord_sn_1, coord_sn_2):
     return math.sqrt((coord_sn_1.x - coord_sn_2.x) ** 2 + (coord_sn_1.y - coord_sn_2.y) ** 2)
@@ -59,12 +60,11 @@ def intersect_line_circle(circle_center, circle_radius, pt1, pt2, full_line=Fals
             return intersections
 
 
-def preprocess(_landmarks_sn, res, _image):
+def preprocess(_landmarks_sn, res, _image, args):
     height, width, _ = _image.shape
     _landmarks_sn.landmarks_list = []
     _yy, _dy = 10, 15
     for idx, hand_landmarks in enumerate(res.multi_hand_landmarks):
-        # print('hand_landmarks:', hand_landmarks)
         _landmarks = SimpleNamespace(
             no=idx,
             handedness=res.multi_handedness[idx].classification[0].label,
@@ -250,11 +250,11 @@ def preprocess(_landmarks_sn, res, _image):
             thumb=calculate_distance_sn(
                 _landmarks.fingers.thumb.mcp,
                 _landmarks.fingers.thumb.ip
-            ) * thumb_width_length_ratio * tip_dip_length_ratio * finger_mcp_width_ratio,
-            index=_landmarks.mcp_width.index_middle / 2 * finger_mcp_width_ratio,
-            middle=_landmarks.mcp_width.middle_ring / 2 * finger_mcp_width_ratio,
-            ring=_landmarks.mcp_width.ring_pinky / 2 * finger_mcp_width_ratio,
-            pinky=_landmarks.mcp_width.ring_pinky / 2 * pinky_ring_width_ratio * finger_mcp_width_ratio
+            ) * args.thumb_width_length_ratio * args.tip_dip_length_ratio * args.finger_mcp_width_ratio,
+            index=_landmarks.mcp_width.index_middle / 2 * args.finger_mcp_width_ratio,
+            middle=_landmarks.mcp_width.middle_ring / 2 * args.finger_mcp_width_ratio,
+            ring=_landmarks.mcp_width.ring_pinky / 2 * args.finger_mcp_width_ratio,
+            pinky=_landmarks.mcp_width.ring_pinky / 2 * args.pinky_ring_width_ratio * args.finger_mcp_width_ratio
         )
 
         thumb_tip = np.array([_landmarks.fingers.thumb.tip.x, _landmarks.fingers.thumb.tip.y])
@@ -296,7 +296,7 @@ def preprocess(_landmarks_sn, res, _image):
 
         _landmarks_sn.landmarks_list.append(_landmarks)
 
-        if debug_mode.coordination_on:
+        if args.debug_mode.coordination_on:
             _text = f'handedness: {_landmarks.handedness}\n'
             for k, v in _landmarks.fingers.__dict__.items():
                 _text += '{} tip: ({:.3f}, {:.3f}, {:.6f})\n'.format(k, v.tip.x, v.tip.y, v.tip.z)
@@ -316,7 +316,7 @@ def preprocess(_landmarks_sn, res, _image):
     _landmarks_sn.image = _image
 
 
-def detect_orientation(_landmarks_sn):
+def detect_orientation(_landmarks_sn, args):
     for _landmarks in _landmarks_sn.landmarks_list:
 
         wrist = np.array([_landmarks.wrist.x, _landmarks.wrist.y])
@@ -344,7 +344,7 @@ def detect_orientation(_landmarks_sn):
                 pinky=False
             )
 
-        if debug_mode.orientation_on:
+        if args.debug_mode.orientation_on:
             coord1 = (int(wrist[0]) + 10, int(wrist[1]))
             _text = 'orientation: {} angle: {}'.format(
                 _landmarks.orientation, orientation_angle
@@ -374,7 +374,7 @@ def detect_orientation(_landmarks_sn):
             )
 
 
-def detect_finger_self_occlusion(_landmarks_sn):
+def detect_finger_self_occlusion(_landmarks_sn, args):
     for _landmarks in _landmarks_sn.landmarks_list:
         if _landmarks.orientation == 'Front':
             wrist_tip_distance = {
@@ -397,10 +397,12 @@ def detect_finger_self_occlusion(_landmarks_sn):
                     _landmarks.finger_status.__dict__[k] = False
 
 
-def detect_palm_occlusion(_landmarks_sn):
+def detect_palm_occlusion(_landmarks_sn, args):
     # hand occlusion detection
     height, width, _ = _landmarks_sn.image.shape
     ls = _landmarks_sn.landmarks_list
+    mp_hands = mediapipe.solutions.hands
+
     if len(ls) > 1:
         if ls[0].fingertip_distance_aggregated > ls[1].fingertip_distance_aggregated:
             close, distant = ls[0], ls[1]
@@ -412,7 +414,7 @@ def detect_palm_occlusion(_landmarks_sn):
         close_y0 = distant_y0 = height * 2
         close_x1 = distant_x1 = -width
         close_y1 = distant_y1 = -height
-        for i in landmark_order:
+        for i in args.landmark_order:
             if close.landmark.__dict__[i].x < close_x0:
                 close_x0 = close.landmark.__dict__[i].x
             if close.landmark.__dict__[i].x > close_x1:
@@ -431,7 +433,7 @@ def detect_palm_occlusion(_landmarks_sn):
             if distant.landmark.__dict__[i].y > distant_y1:
                 distant_y1 = distant.landmark.__dict__[i].y
 
-        if debug_mode.scoop_on:
+        if args.debug_mode.scoop_on:
             cv2.putText(
                 img=_landmarks_sn.image,
                 text='Close',
@@ -478,12 +480,12 @@ def detect_palm_occlusion(_landmarks_sn):
                 ri = int(distant.fingertip_major_axes.__dict__[ki] * 2.5)
 
                 for first, second in connections_number:
-                    x1 = int(close.landmark.__dict__[landmark_order[first]].x)
-                    y1 = int(close.landmark.__dict__[landmark_order[first]].y)
-                    x2 = int(close.landmark.__dict__[landmark_order[second]].x)
-                    y2 = int(close.landmark.__dict__[landmark_order[second]].y)
+                    x1 = int(close.landmark.__dict__[args.landmark_order[first]].x)
+                    y1 = int(close.landmark.__dict__[args.landmark_order[first]].y)
+                    x2 = int(close.landmark.__dict__[args.landmark_order[second]].x)
+                    y2 = int(close.landmark.__dict__[args.landmark_order[second]].y)
                     intersect_res = None
-                    if not (-EPS <= x1 - x2 <= EPS and -EPS <= y1 - y2 <= EPS):
+                    if not (-args.EPS <= x1 - x2 <= args.EPS and -args.EPS <= y1 - y2 <= args.EPS):
                         intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
                     else:
                         # Two points overlapping as one cannot discriminate one line.
@@ -493,10 +495,11 @@ def detect_palm_occlusion(_landmarks_sn):
                         distant.finger_status.__dict__[ki] = False
 
 
-def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
+def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, args):
     _image = _landmarks_sn.image
     image_height, image_width, _ = _image.shape
     mask_image = np.zeros(_image.shape, _image.dtype)
+
     if _blur_mode == 1:
         blur_source_image = cv2.blur(_image, (_kernel_size, _kernel_size))
 
@@ -513,7 +516,7 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
             minor_axe = int(_landmark.fingertip_minor_axes.__dict__[k])
             angle = _landmark.fingertip_angle.__dict__[k]
 
-            if debug_mode.output_on:
+            if args.debug_mode.output_on:
                 _text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
                 cv2.putText(
                     img=_image,
@@ -526,7 +529,7 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
                 )
 
             if _landmark.finger_status.__dict__[k]:
-                if debug_mode.circle_on:
+                if args.debug_mode.circle_on:
                     cv2.ellipse(
                         img=_image,
                         center=center,
@@ -551,7 +554,7 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
                     )
 
             else:
-                if debug_mode.circle_on:
+                if args.debug_mode.circle_on:
                     cv2.ellipse(
                         img=_image,
                         center=center,
@@ -568,23 +571,29 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
         _landmarks_sn.image = _image
 
 
-def fingerprint_erase(_args, group_number):
+def fingerprint_erase(group_number):
     interruption_flag = False
     prev_frame_time = 0
     curr_frame_time = 0
 
-    video_source = _args.file_path
-    temp_path = os.path.join(_args.folder, str(group_number))
+    with open('./args.json', 'r') as f:
+        args = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+
+    video_source = args.file_path
+    temp_path = os.path.join(args.folder, str(group_number))
     if not os.path.exists(temp_path):
         os.mkdir(temp_path)
     # video_source = 0
     cap = cv2.VideoCapture(video_source)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, _args.frame_jump_unit * group_number)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, args.frame_jump_unit * group_number)
     proc_frames = 0
+
+    mp_drawing = mediapipe.solutions.drawing_utils
+    mp_hands = mediapipe.solutions.hands
 
     try:
         with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
-            while proc_frames < _args.frame_jump_unit:
+            while proc_frames < args.frame_jump_unit:
                 success, frame = cap.read()
 
                 if not success:
@@ -601,7 +610,7 @@ def fingerprint_erase(_args, group_number):
 
                 # Rendering results
                 if results.multi_hand_landmarks:
-                    if debug_mode.landmark_on:
+                    if args.debug_mode.landmark_on:
                         for num, hand in enumerate(results.multi_hand_landmarks):
                             mp_drawing.draw_landmarks(
                                 image, hand, mp_hands.HAND_CONNECTIONS,
@@ -613,13 +622,13 @@ def fingerprint_erase(_args, group_number):
                         timestamp=int(round(time.time() * 1000)),
                     )
 
-                    preprocess(landmarks_sn, results, image)
+                    preprocess(landmarks_sn, results, image, args)
 
-                    detect_orientation(landmarks_sn)
+                    detect_orientation(landmarks_sn, args)
 
-                    detect_finger_self_occlusion(landmarks_sn)
+                    detect_finger_self_occlusion(landmarks_sn, args)
 
-                    detect_palm_occlusion(landmarks_sn)
+                    detect_palm_occlusion(landmarks_sn, args)
 
                 else:
                     landmarks_sn = SimpleNamespace(
@@ -628,9 +637,9 @@ def fingerprint_erase(_args, group_number):
                         image=image
                     )
 
-                process_fingertip(landmarks_sn, _args.blur_mode, _args.kernel_size)
+                process_fingertip(landmarks_sn, args.blur_mode, args.kernel_size, args)
 
-                if debug_mode.frame_rate_on:
+                if args.debug_mode.frame_rate_on:
                     curr_frame_time = time.time()
                     fps = int(1 / (curr_frame_time - prev_frame_time))
                     prev_frame_time = curr_frame_time
