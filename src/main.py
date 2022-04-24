@@ -6,6 +6,7 @@ import json
 import platform
 import ffmpeg
 import subprocess
+import math
 import multiprocessing as mp
 
 from types import SimpleNamespace
@@ -108,16 +109,15 @@ if __name__ == '__main__':
         video_extension = '.ogv'
 
     cap = cv2.VideoCapture(args.file_path)
-    performance_attributes.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    frame_count = performance_attributes.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     performance_attributes.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
-    cap.release()
+    args.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
 
     video = VideoFileClip(args.file_path)
-    frame_count = video.reader.nframes
-    frame_rate = video.fps
-    args.fps = frame_rate
+    # frame_count = video.reader.nframes
+    # frame_rate = video.fps
+    # args.fps = frame_rate
     audio = video.audio
 
     performance_attributes.threads = args.num_processes = mp.cpu_count()
@@ -170,6 +170,12 @@ if __name__ == '__main__':
     print('Time elapsed: {}s'.format(
         performance_attributes.time_concat_start - performance_attributes.time_initial_start))
     concat = concatenate_videoclips(clip_to_concat)
+    frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    fps = frame_rate = cap.get(cv2.CAP_PROP_FPS)
+    duration = math.floor(frames / fps)
+    concat = concat.subclip(0, duration)
+    # Get rid of the last frame which may cause IndexError Exception. Bug caused by moviepy
+    concat = concat.subclip(t_end=(concat.duration - 1.0 / concat.fps))
 
     performance_attributes.time_output_start = int(time.time())
     print('Output start time: {}'.format(
@@ -179,7 +185,8 @@ if __name__ == '__main__':
     dst_path = '.'
     audio = audio.subclip(0, concat.duration)
     audio.write_audiofile(
-        filename=dst_path + '/output' + '.wav'
+        filename=dst_path + '/output' + '.wav',
+        threads=args.num_processes
     )
 
     concat.set_audio(audio)
@@ -190,6 +197,7 @@ if __name__ == '__main__':
         codec=codec,
         threads=args.num_processes
     )
+    cap.release()
     video.close()
 
     video_file_path = os.path.abspath(dst_path + '/output' + video_extension)
@@ -200,9 +208,9 @@ if __name__ == '__main__':
         input_audio = ffmpeg.input(audio_file_path)
         (
             ffmpeg
-            .concat(input_video, input_audio, v=1, a=1)
-            .output(output_file_path)
-            .run(overwrite_output=True)
+                .concat(input_video, input_audio, v=1, a=1)
+                .output(output_file_path)
+                .run(overwrite_output=True)
         )
     else:
         # Windows encounters file path errors.
