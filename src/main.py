@@ -5,6 +5,7 @@ import threadpool
 import json
 import platform
 import ffmpeg
+import subprocess
 import multiprocessing as mp
 
 from types import SimpleNamespace
@@ -13,7 +14,6 @@ from moviepy.editor import VideoFileClip, concatenate_videoclips, CompositeVideo
 from gui_get_option import get_option
 from core_neomask_finger_tracking import fingerprint_erase
 from utility import sn2dict, pic2video_clip
-
 
 clip_list = []
 
@@ -193,17 +193,18 @@ if __name__ == '__main__':
     video_file_path = os.path.abspath(dst_path + '/output' + video_extension)
     audio_file_path = os.path.abspath(dst_path + '/output' + '.wav')
     output_file_path = os.path.abspath(dst_path + '/blurred' + video_extension)
-    # ffmpeg_codec = 'copy'
-    # subprocess.run(f"ffmpeg -i {video_file_path} -i {audio_file_path} -c {ffmpeg_codec} {output_file_path}")
-
-    input_video = ffmpeg.input(video_file_path)
-    input_audio = ffmpeg.input(audio_file_path)
-    (
-        ffmpeg
-        .concat(input_video, input_audio, v=1, a=1)
-        .output(output_file_path)
-        .run(overwrite_output=True)
-    )
+    if operation_system == 'Linux':
+        input_video = ffmpeg.input(video_file_path)
+        input_audio = ffmpeg.input(audio_file_path)
+        (
+            ffmpeg
+            .concat(input_video, input_audio, v=1, a=1)
+            .output(output_file_path)
+            .run(overwrite_output=True)
+        )
+    else:
+        # Windows encounters file path errors.
+        subprocess.run(f"ffmpeg -i {video_file_path} -i {audio_file_path} -y {output_file_path}")
 
     performance_attributes.time_finish = int(time.time())
     print('ALL ACCOMPLISHED')
@@ -224,5 +225,4 @@ if __name__ == '__main__':
     print('- Frames size: {} x {}'.format(performance_attributes.frame_width, performance_attributes.frame_height))
     print('- Video frame rate: {}FPS'.format(performance_attributes.frame_rate))
     print('- Average frame processing rate: {:.3f}FPS'.format(performance_attributes.frame_count / (
-                performance_attributes.time_compile_start - performance_attributes.time_erase_start)))
-
+            performance_attributes.time_compile_start - performance_attributes.time_erase_start)))
