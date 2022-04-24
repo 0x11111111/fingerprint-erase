@@ -666,6 +666,8 @@ def fingerprint_erase(_args, group_number):
 
 
 if __name__ == '__main__':
+    mp.freeze_support()
+
     debug_mode = SimpleNamespace(
         circle_on=False,
         landmark_on=False,
