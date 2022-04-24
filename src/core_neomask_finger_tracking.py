@@ -575,8 +575,8 @@ def fingerprint_erase(group_number):
     prev_frame_time = 0
     curr_frame_time = 0
 
-    video_source = file_path
-    temp_path = os.path.join(folder, str(group_number))
+    video_source = args.file_path
+    temp_path = os.path.join(args.folder, str(group_number))
     if not os.path.exists(temp_path):
         os.mkdir(temp_path)
     # video_source = 0
@@ -630,7 +630,7 @@ def fingerprint_erase(group_number):
                         image=image
                     )
 
-                process_fingertip(landmarks_sn, blur_mode, kernel_size)
+                process_fingertip(landmarks_sn, args.blur_mode, args.kernel_size)
 
                 if debug_mode.frame_rate_on:
                     curr_frame_time = time.time()
@@ -648,7 +648,7 @@ def fingerprint_erase(group_number):
 
                 processed_image = landmarks_sn.image
                 cv2.imwrite(os.path.join(temp_path, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
-                cv2.imshow('Hand Tracking', processed_image)
+                # cv2.imshow('Hand Tracking', processed_image)
 
                 proc_frames += 1
 
@@ -675,14 +675,17 @@ if __name__ == '__main__':
         scoop_on=False,
     )
 
+    args = SimpleNamespace(
+        folder=os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
+    )
+
     mp_drawing = mediapipe.solutions.drawing_utils
     mp_hands = mediapipe.solutions.hands
 
     if not os.path.exists("../.tmp"):
         os.mkdir("../.tmp")
 
-    folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
-    os.mkdir(folder)
+    os.mkdir(args.folder)
 
     EPS = 0.0001
     fingertip_radius_sn = SimpleNamespace(
@@ -708,15 +711,15 @@ if __name__ == '__main__':
     image_list = []
 
     selection = get_option()
-    file_path = selection['file_path']
+    args.file_path = selection['file_path']
     # Kernel size of Gaussian should be odd only
-    kernel_size = int(selection['blur_value'] // 2 * 2 + 1)
+    args.kernel_size = int(selection['blur_value'] // 2 * 2 + 1)
 
-    blur_mode = 0
+    args.blur_mode = 0
     if selection['normalization']:
-        blur_mode = 1
+        args.blur_mode = 1
     elif selection['gaussian']:
-        blur_mode = 2
+        args.blur_mode = 2
 
     cap = cv2.VideoCapture(selection['file_path'])
     frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
