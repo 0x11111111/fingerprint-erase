@@ -1,9 +1,10 @@
-import mediapipe as mp
+import mediapipe
 import cv2
 import os
 import time
 import math
 import numpy as np
+import multiprocessing as mp
 from types import SimpleNamespace
 from gui_get_option import get_option
 
@@ -569,92 +570,98 @@ def process_fingertip(_landmarks_sn, _blur_mode=1, _kernel_size=11):
         _landmarks_sn.image = _image
 
 
-def fingerprint_erase(file_path, _blur_mode, kernel_size):
+def fingerprint_erase(group_number):
     interruption_flag = False
     prev_frame_time = 0
     curr_frame_time = 0
 
     video_source = file_path
+    temp_path = os.path.join(folder, str(group_number))
+    if not os.path.exists(temp_path):
+        os.mkdir(temp_path)
     # video_source = 0
     cap = cv2.VideoCapture(video_source)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, frame_jump_unit * group_number)
+    proc_frames = 0
 
-    with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
-        while cap.isOpened():
-            success, frame = cap.read()
+    try:
+        with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
+            while proc_frames < frame_jump_unit:
+                success, frame = cap.read()
 
-            if not success:
-                break
+                if not success:
+                    break
 
-            image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            if isinstance(video_source, int):
-                image = cv2.flip(image, 1)
-            image.flags.writeable = False
-            results = hands.process(image)
-            image.flags.writeable = True
-            image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+                if isinstance(video_source, int):
+                    image = cv2.flip(image, 1)
+                image.flags.writeable = False
+                results = hands.process(image)
+                image.flags.writeable = True
+                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
 
-            # Rendering results
-            if results.multi_hand_landmarks:
-                if debug_mode.landmark_on:
-                    for num, hand in enumerate(results.multi_hand_landmarks):
-                        mp_drawing.draw_landmarks(
-                            image, hand, mp_hands.HAND_CONNECTIONS,
-                            mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                            mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
-                        )
+                # Rendering results
+                if results.multi_hand_landmarks:
+                    if debug_mode.landmark_on:
+                        for num, hand in enumerate(results.multi_hand_landmarks):
+                            mp_drawing.draw_landmarks(
+                                image, hand, mp_hands.HAND_CONNECTIONS,
+                                mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
+                                mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
+                            )
 
-                landmarks_sn = SimpleNamespace(
-                    timestamp=int(round(time.time() * 1000)),
-                )
+                    landmarks_sn = SimpleNamespace(
+                        timestamp=int(round(time.time() * 1000)),
+                    )
 
-                preprocess(landmarks_sn, results, image)
+                    preprocess(landmarks_sn, results, image)
 
-                detect_orientation(landmarks_sn)
+                    detect_orientation(landmarks_sn)
 
-                detect_finger_self_occlusion(landmarks_sn)
+                    detect_finger_self_occlusion(landmarks_sn)
 
-                detect_palm_occlusion(landmarks_sn)
+                    detect_palm_occlusion(landmarks_sn)
 
-            else:
-                landmarks_sn = SimpleNamespace(
-                    timestamp=int(round(time.time() * 1000)),
-                    landmarks_list=[],
-                    image=image
-                )
+                else:
+                    landmarks_sn = SimpleNamespace(
+                        timestamp=int(round(time.time() * 1000)),
+                        landmarks_list=[],
+                        image=image
+                    )
 
-            process_fingertip(landmarks_sn, _blur_mode, kernel_size)
+                process_fingertip(landmarks_sn, blur_mode, kernel_size)
 
-            if debug_mode.frame_rate_on:
-                curr_frame_time = time.time()
-                fps = int(1 / (curr_frame_time - prev_frame_time))
-                prev_frame_time = curr_frame_time
-                cv2.putText(
-                    img=landmarks_sn.image,
-                    text='{} FPS'.format(fps),
-                    org=(10, 10),
-                    fontFace=cv2.FONT_HERSHEY_PLAIN,
-                    fontScale=1,
-                    color=(0x00, 0xFF, 0x00),
-                    thickness=2
-                )
+                if debug_mode.frame_rate_on:
+                    curr_frame_time = time.time()
+                    fps = int(1 / (curr_frame_time - prev_frame_time))
+                    prev_frame_time = curr_frame_time
+                    cv2.putText(
+                        img=landmarks_sn.image,
+                        text='{} FPS'.format(fps),
+                        org=(10, 10),
+                        fontFace=cv2.FONT_HERSHEY_PLAIN,
+                        fontScale=1,
+                        color=(0x00, 0xFF, 0x00),
+                        thickness=2
+                    )
 
-            # processed_image = cv2.cvtColor(landmarks_sn.image, cv2.CV_32S)
-            processed_image = landmarks_sn.image
-            cv2.imwrite(os.path.join(folder, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
-            cv2.imshow('Hand Tracking', processed_image)
+                processed_image = landmarks_sn.image
+                cv2.imwrite(os.path.join(temp_path, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
+                cv2.imshow('Hand Tracking', processed_image)
 
-            if cv2.waitKey(10) & 0xFF == ord('q'):
-                interruption_flag = True
-                break
+                proc_frames += 1
+
+                if cv2.waitKey(10) & 0xFF == ord('q'):
+                    interruption_flag = True
+                    break
+
+    except:
+        cap.release()
+        cv2.destroyAllWindows()
 
     cap.release()
     cv2.destroyAllWindows()
-
-    if interruption_flag:
-        return None
-
-    return folder
 
 
 if __name__ == '__main__':
@@ -668,8 +675,8 @@ if __name__ == '__main__':
         scoop_on=False,
     )
 
-    mp_drawing = mp.solutions.drawing_utils
-    mp_hands = mp.solutions.hands
+    mp_drawing = mediapipe.solutions.drawing_utils
+    mp_hands = mediapipe.solutions.hands
 
     if not os.path.exists("../.tmp"):
         os.mkdir("../.tmp")
@@ -701,8 +708,9 @@ if __name__ == '__main__':
     image_list = []
 
     selection = get_option()
+    file_path = selection['file_path']
     # Kernel size of Gaussian should be odd only
-    blur_value = int(selection['blur_value'] // 2 * 2 + 1)
+    kernel_size = int(selection['blur_value'] // 2 * 2 + 1)
 
     blur_mode = 0
     if selection['normalization']:
@@ -710,10 +718,12 @@ if __name__ == '__main__':
     elif selection['gaussian']:
         blur_mode = 2
 
-    processed_path = fingerprint_erase(
-        file_path=selection['file_path'],
-        _blur_mode=blur_mode,
-        kernel_size=blur_value
-    )
-    print(processed_path)
+    cap = cv2.VideoCapture(selection['file_path'])
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    num_processes = mp.cpu_count()
+    frame_jump_unit = frame_count // num_processes
+
+    p = mp.Pool(num_processes)
+    p.map(fingerprint_erase, range(num_processes))
 
