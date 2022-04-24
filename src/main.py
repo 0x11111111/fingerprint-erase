@@ -174,7 +174,7 @@ if __name__ == '__main__':
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_output_start))))
     print('Time elapsed: {}s'.format(
         performance_attributes.time_output_start - performance_attributes.time_initial_start))
-    dst_path = './output'
+    dst_path = '.'
     audio = audio.subclip(0, concat.duration)
     audio.write_audiofile(
         filename=dst_path + '/output' + '.wav'
