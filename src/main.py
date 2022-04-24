@@ -3,13 +3,15 @@ import os
 import cv2
 import time
 import multiprocessing as mp
+import threadpool
 import json
 from functools import partial
 from types import SimpleNamespace
+from moviepy.editor import VideoFileClip
 
 from gui_get_option import get_option
 from core_neomask_finger_tracking import fingerprint_erase
-from utility import sn2dict
+from utility import sn2dict, pic2video
 
 
 if __name__ == '__main__':
@@ -64,11 +66,19 @@ if __name__ == '__main__':
     elif selection['gaussian']:
         args.blur_mode = 2
 
-    cap = cv2.VideoCapture(args.file_path)
-    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    cap.release()
+    # cap = cv2.VideoCapture(args.file_path)
+    # frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    # cap.release()
 
-    args.num_processes = mp.cpu_count() // 2
+    video = VideoFileClip(args.file_path)
+    frame_count = video.reader.nframes
+    frame_rate = video.fps
+    audio = video.audio
+
+
+    video.close()
+
+    args.num_processes = mp.cpu_count()
     args.frame_jump_unit = frame_count // args.num_processes
 
     args_dict = sn2dict(args)
@@ -76,5 +86,10 @@ if __name__ == '__main__':
     with open('./args.json', 'w') as f:
         json.dump(args_dict, f)
 
-    p = mp.Pool(args.num_processes)
-    p.map(fingerprint_erase, range(args.num_processes))
+    # p = mp.Pool(args.num_processes)
+    # p.map(fingerprint_erase, range(args.num_processes))
+
+    pool = threadpool.ThreadPool(args.num_processes)
+    requests = threadpool.makeRequests(fingerprint_erase, range(args.num_processes))
+    [pool.putRequest(req) for req in requests]
+    pool.wait()
