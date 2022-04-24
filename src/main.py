@@ -121,6 +121,8 @@ if __name__ == '__main__':
     audio = video.audio
 
     performance_attributes.threads = args.num_processes = mp.cpu_count()
+    if selection.single_thread:
+        performance_attributes.threads = args.num_processes = 1
     args.frame_jump_unit = frame_count // args.num_processes
 
     args_dict = sn2dict(args)

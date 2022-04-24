@@ -30,6 +30,11 @@ def get_option():
             sg.Radio(key='png', text='png(.avi) 高画质', group_id='codec'),
             sg.Radio(key='libvpx', text='libvpx(.webm) 网页', group_id='codec'),
             sg.Radio(key='libvorbis', text='libvorbis(.ogv) 网页', group_id='codec')
+        ],
+        [
+            sg.Text('多线程'),
+            sg.Radio(key='multi_thread', text='多线程', group_id='threads', default=True),
+            sg.Radio(key='single_thread', text='单线程(多线程处理失败选择)', group_id='threads')
         ]
     ]
     # WINDOW generation
