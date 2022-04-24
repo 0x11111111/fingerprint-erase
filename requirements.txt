@@ -26,3 +26,5 @@ requests==2.27.1
 six==1.16.0
 tqdm==4.64.0
 urllib3==1.26.9
+
+threadpool~=1.3.2

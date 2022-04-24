@@ -1,8 +1,4 @@
 import PySimpleGUI as sg
-import cv2
-import numpy as np
-from PIL import Image
-from pathlib import Path
 
 
 def get_option():
@@ -14,7 +10,7 @@ def get_option():
     layout = [
         [
             sg.Text('输入文件选择'),
-            sg.InputText(size=(90, 15)),
+            sg.InputText(key='text_file_path', size=(90, 15)),
             sg.FileBrowse(key='file_path', button_text='浏览'),
             sg.Submit(key='submit', button_text='提交'),
             sg.Cancel(key='exit', button_text='退出')
@@ -45,11 +41,11 @@ def get_option():
         if event == 'exit' or event == sg.WIN_CLOSED:
             break
         elif event == 'submit':
-            if values[0] == '':
+            if values['text_file_path'] == '':
                 sg.popup('未选择文件')
                 event = ''
             else:
-                file_path = values[0]
+                file_path = values['text_file_path']
                 break
     window.close()
     return values

@@ -1,6 +1,7 @@
 import os
 import moviepy
 import moviepy.video.io.ImageSequenceClip
+import json
 from types import SimpleNamespace
 
 
@@ -16,8 +17,16 @@ def sn2dict(sn):
     return d
 
 
-def pic2video(frame_path, video_dst, codec, fps):
-    frame_name = sorted(os.listdir(frame_path))
-    frame_path_list = [frame_path + frame_name for frame_name in frame_name]
-    clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(frame_path_list, fps=fps)
-    clip.write_videofile(video_dst, codec='libx264')
+def pic2video_clip(group_number):
+    with open('./args.json', 'r') as f:
+        args = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+
+    frame_path = os.path.join(args.folder, str(group_number))
+    frame_path_list = sorted(os.listdir(frame_path))
+    frame_full_path_list = [frame_path + '/' + frame_name for frame_name in frame_path_list]
+
+    # print(frame_full_path_list)
+    clip = moviepy.video.io.ImageSequenceClip.ImageSequenceClip(frame_full_path_list, fps=args.fps)
+    return group_number, clip
+
+
