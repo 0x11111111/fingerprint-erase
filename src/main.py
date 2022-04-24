@@ -186,7 +186,6 @@ if __name__ == '__main__':
     audio = audio.subclip(0, concat.duration)
     audio.write_audiofile(
         filename=dst_path + '/output' + '.wav',
-        threads=args.num_processes
     )
 
     concat.set_audio(audio)
