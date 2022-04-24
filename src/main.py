@@ -175,7 +175,7 @@ if __name__ == '__main__':
     duration = math.floor(frames / fps)
     concat = concat.subclip(0, duration)
     # Get rid of the last frame which may cause IndexError Exception. Bug caused by moviepy
-    concat = concat.subclip(t_end=(concat.duration - 1.0 / concat.fps))
+    concat = concat.subclip(t_end=(concat.duration - 10.0 / concat.fps))
 
     performance_attributes.time_output_start = int(time.time())
     print('Output start time: {}'.format(
