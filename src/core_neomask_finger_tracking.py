@@ -578,6 +578,7 @@ def fingerprint_erase(group_number):
 
     with open('./info.json', 'r') as f:
         info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+        f.close()
 
     video_source = info.file_path
     temp_path = os.path.join(info.folder, str(group_number))

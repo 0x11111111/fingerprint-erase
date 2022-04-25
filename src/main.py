@@ -77,6 +77,7 @@ if __name__ == '__main__':
         # Options fetched from file in argv[1]
         with open(sys.argv[1], 'r') as f:
             selection = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+            f.close()
 
     performance_attributes = SimpleNamespace(
         time_initial_start=int(time.time())
@@ -137,6 +138,7 @@ if __name__ == '__main__':
 
     with open('./info.json', 'w') as f:
         json.dump(info_dict, f)
+        f.close()
 
     performance_attributes.time_erase_start = int(time.time())
     print('Erase start time: {}'.format(
