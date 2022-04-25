@@ -27,9 +27,21 @@ def get_clip_result(requests, res):
 
 
 if __name__ == '__main__':
-    info = SimpleNamespace(
-        folder=os.path.join('../.tmp', '{}'.format(int(round(time.time()))))
-    )
+    info = SimpleNamespace()
+    option = None
+    if len(sys.argv) <= 1:
+        # No command line arguments
+        option = get_option()
+        option = SimpleNamespace(**option)
+        info.option = option
+    else:
+        # Options fetched from file in argv[1]
+        with open(sys.argv[1], 'r') as f:
+            info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+            option = info.option
+            f.close()
+    # Spawn a new temporary file folder
+    info.folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
 
     info.debug_mode = SimpleNamespace(
         circle_on=False,
@@ -43,7 +55,6 @@ if __name__ == '__main__':
 
     if not os.path.exists("../.tmp"):
         os.mkdir("../.tmp")
-
     os.mkdir(info.folder)
 
     info.EPS = 0.0001
@@ -67,19 +78,6 @@ if __name__ == '__main__':
     info.finger_mcp_width_ratio = 0.65
 
     info.landmark_order = 'abcdefghijklmnopqrstu'
-
-    option = None
-    if len(sys.argv) <= 1:
-        # No command line arguments
-        option = get_option()
-        option = SimpleNamespace(**option)
-        info.option = option
-    else:
-        # Options fetched from file in argv[1]
-        with open(sys.argv[1], 'r') as f:
-            info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
-            option = info.option
-            f.close()
 
     performance_attributes = SimpleNamespace(
         time_initial_start=int(time.time())
