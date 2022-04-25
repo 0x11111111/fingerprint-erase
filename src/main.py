@@ -3,10 +3,11 @@ import time
 import cv2
 import threadpool
 import json
-import platform
 import ffmpeg
 import subprocess
+import platform
 import math
+import sys
 import multiprocessing as mp
 
 from types import SimpleNamespace
@@ -26,11 +27,11 @@ def get_clip_result(requests, res):
 
 
 if __name__ == '__main__':
-    args = SimpleNamespace(
+    info = SimpleNamespace(
         folder=os.path.join('../.tmp', '{}'.format(int(round(time.time()))))
     )
 
-    args.debug_mode = SimpleNamespace(
+    info.debug_mode = SimpleNamespace(
         circle_on=False,
         landmark_on=False,
         coordination_on=False,
@@ -43,48 +44,55 @@ if __name__ == '__main__':
     if not os.path.exists("../.tmp"):
         os.mkdir("../.tmp")
 
-    os.mkdir(args.folder)
+    os.mkdir(info.folder)
 
-    args.EPS = 0.0001
-    args.fingertip_radius_sn = SimpleNamespace(
+    info.EPS = 0.0001
+    info.fingertip_radius_sn = SimpleNamespace(
         thumb=20.0,
         index=18.4,
         middle=18.3,
         ring=17.3,
         pinky=15.3
     )
-    args.finger_length_sn = SimpleNamespace(
+    info.finger_length_sn = SimpleNamespace(
         thumb=32.1,
         index=24.7,
         middle=26.4,
         ring=26.3,
         pinky=23.7
     )
-    args.tip_dip_length_ratio = 0.8
-    args.pinky_ring_width_ratio = 0.89
-    args.thumb_width_length_ratio = 0.60
-    args.finger_mcp_width_ratio = 0.65
+    info.tip_dip_length_ratio = 0.8
+    info.pinky_ring_width_ratio = 0.89
+    info.thumb_width_length_ratio = 0.60
+    info.finger_mcp_width_ratio = 0.65
 
-    args.landmark_order = 'abcdefghijklmnopqrstu'
+    info.landmark_order = 'abcdefghijklmnopqrstu'
 
-    selection = get_option()
+    selection = None
+    if len(sys.argv) <= 1:
+        # No command line arguments
+        selection = get_option()
+        selection = SimpleNamespace(**selection)
+    else:
+        # Options fetched from file in argv[1]
+        with open(sys.argv[1], 'r') as f:
+            selection = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+
     performance_attributes = SimpleNamespace(
         time_initial_start=int(time.time())
     )
     print('Initial time: {}'.format(
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_initial_start))))
 
-    # print(selection)
-    selection = SimpleNamespace(**selection)
-    args.file_path = selection.file_path
+    info.file_path = selection.file_path
     # Kernel size of Gaussian should be odd only
-    args.kernel_size = int(selection.blur_value // 2 * 2 + 1)
+    info.kernel_size = int(selection.blur_value // 2 * 2 + 1)
 
-    args.blur_mode = 0
+    info.blur_mode = 0
     if selection.normalization:
-        args.blur_mode = 1
+        info.blur_mode = 1
     elif selection.gaussian:
-        args.blur_mode = 2
+        info.blur_mode = 2
 
     codec = None
     video_extension = None
@@ -108,44 +116,43 @@ if __name__ == '__main__':
         codec = 'libvorbis'
         video_extension = '.ogv'
 
-    cap = cv2.VideoCapture(args.file_path)
+    cap = cv2.VideoCapture(info.file_path)
     frame_count = performance_attributes.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     performance_attributes.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    args.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
+    info.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
 
-    video = VideoFileClip(args.file_path)
+    video = VideoFileClip(info.file_path)
     # frame_count = video.reader.nframes
     # frame_rate = video.fps
-    # args.fps = frame_rate
+    # info.fps = frame_rate
     audio = video.audio
 
-    performance_attributes.threads = args.num_processes = mp.cpu_count()
-    if selection.single_thread:
-        performance_attributes.threads = args.num_processes = 1
-    args.frame_jump_unit = frame_count // args.num_processes
+    performance_attributes.threads = info.num_processes = mp.cpu_count()
+    if selection.single_process or selection.single_thread:
+        performance_attributes.threads = info.num_processes = 1
+    info.frame_jump_unit = frame_count // info.num_processes
 
-    args_dict = sn2dict(args)
+    info_dict = sn2dict(info)
 
-    with open('./args.json', 'w') as f:
-        json.dump(args_dict, f)
+    with open('./info.json', 'w') as f:
+        json.dump(info_dict, f)
 
     performance_attributes.time_erase_start = int(time.time())
     print('Erase start time: {}'.format(
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_erase_start))))
     print('Time elapsed: {}s'.format(
         performance_attributes.time_erase_start - performance_attributes.time_initial_start))
-    operation_system = platform.system()
-    if operation_system == 'Linux':
-        pool = mp.Pool(args.num_processes)
-        pool.map(fingerprint_erase, range(args.num_processes))
+
+    if selection.multi_process or selection.single_process:
+        pool = mp.Pool(info.num_processes)
+        pool.map_async(fingerprint_erase, range(info.num_processes))
         pool.close()
         pool.join()
 
     else:
-        # Windows doesn't support fork()
-        pool = threadpool.ThreadPool(args.num_processes)
-        requests = threadpool.makeRequests(fingerprint_erase, range(args.num_processes))
+        pool = threadpool.ThreadPool(info.num_processes)
+        requests = threadpool.makeRequests(fingerprint_erase, range(info.num_processes))
         [pool.putRequest(req) for req in requests]
         pool.wait()
 
@@ -154,8 +161,8 @@ if __name__ == '__main__':
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_compile_start))))
     print('Time elapsed: {}s'.format(
         performance_attributes.time_compile_start - performance_attributes.time_initial_start))
-    pool = threadpool.ThreadPool(args.num_processes)
-    requests = threadpool.makeRequests(pic2video_clip, range(args.num_processes), get_clip_result)
+    pool = threadpool.ThreadPool(info.num_processes)
+    requests = threadpool.makeRequests(pic2video_clip, range(info.num_processes), get_clip_result)
     [pool.putRequest(req) for req in requests]
     pool.wait()
 
@@ -194,7 +201,7 @@ if __name__ == '__main__':
     concat.write_videofile(
         filename=dst_path + '/output' + video_extension,
         codec=codec,
-        threads=args.num_processes
+        threads=info.num_processes
     )
     cap.release()
     video.close()
@@ -202,14 +209,14 @@ if __name__ == '__main__':
     video_file_path = os.path.abspath(dst_path + '/output' + video_extension)
     audio_file_path = os.path.abspath(dst_path + '/output' + '.wav')
     output_file_path = os.path.abspath(dst_path + '/blurred' + video_extension)
-    if operation_system == 'Linux':
+    if platform.system() == 'Linux':
         input_video = ffmpeg.input(video_file_path)
         input_audio = ffmpeg.input(audio_file_path)
         (
             ffmpeg
-                .concat(input_video, input_audio, v=1, a=1)
-                .output(output_file_path)
-                .run(overwrite_output=True)
+            .concat(input_video, input_audio, v=1, a=1)
+            .output(output_file_path)
+            .run(overwrite_output=True)
         )
     else:
         # Windows encounters file path errors.

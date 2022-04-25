@@ -60,7 +60,7 @@ def intersect_line_circle(circle_center, circle_radius, pt1, pt2, full_line=Fals
             return intersections
 
 
-def preprocess(_landmarks_sn, res, _image, args):
+def preprocess(_landmarks_sn, res, _image, info):
     height, width, _ = _image.shape
     _landmarks_sn.landmarks_list = []
     _yy, _dy = 10, 15
@@ -250,11 +250,11 @@ def preprocess(_landmarks_sn, res, _image, args):
             thumb=calculate_distance_sn(
                 _landmarks.fingers.thumb.mcp,
                 _landmarks.fingers.thumb.ip
-            ) * args.thumb_width_length_ratio * args.tip_dip_length_ratio * args.finger_mcp_width_ratio,
-            index=_landmarks.mcp_width.index_middle / 2 * args.finger_mcp_width_ratio,
-            middle=_landmarks.mcp_width.middle_ring / 2 * args.finger_mcp_width_ratio,
-            ring=_landmarks.mcp_width.ring_pinky / 2 * args.finger_mcp_width_ratio,
-            pinky=_landmarks.mcp_width.ring_pinky / 2 * args.pinky_ring_width_ratio * args.finger_mcp_width_ratio
+            ) * info.thumb_width_length_ratio * info.tip_dip_length_ratio * info.finger_mcp_width_ratio,
+            index=_landmarks.mcp_width.index_middle / 2 * info.finger_mcp_width_ratio,
+            middle=_landmarks.mcp_width.middle_ring / 2 * info.finger_mcp_width_ratio,
+            ring=_landmarks.mcp_width.ring_pinky / 2 * info.finger_mcp_width_ratio,
+            pinky=_landmarks.mcp_width.ring_pinky / 2 * info.pinky_ring_width_ratio * info.finger_mcp_width_ratio
         )
 
         thumb_tip = np.array([_landmarks.fingers.thumb.tip.x, _landmarks.fingers.thumb.tip.y])
@@ -296,7 +296,7 @@ def preprocess(_landmarks_sn, res, _image, args):
 
         _landmarks_sn.landmarks_list.append(_landmarks)
 
-        if args.debug_mode.coordination_on:
+        if info.debug_mode.coordination_on:
             _text = f'handedness: {_landmarks.handedness}\n'
             for k, v in _landmarks.fingers.__dict__.items():
                 _text += '{} tip: ({:.3f}, {:.3f}, {:.6f})\n'.format(k, v.tip.x, v.tip.y, v.tip.z)
@@ -316,7 +316,7 @@ def preprocess(_landmarks_sn, res, _image, args):
     _landmarks_sn.image = _image
 
 
-def detect_orientation(_landmarks_sn, args):
+def detect_orientation(_landmarks_sn, info):
     for _landmarks in _landmarks_sn.landmarks_list:
 
         wrist = np.array([_landmarks.wrist.x, _landmarks.wrist.y])
@@ -344,7 +344,7 @@ def detect_orientation(_landmarks_sn, args):
                 pinky=False
             )
 
-        if args.debug_mode.orientation_on:
+        if info.debug_mode.orientation_on:
             coord1 = (int(wrist[0]) + 10, int(wrist[1]))
             _text = 'orientation: {} angle: {}'.format(
                 _landmarks.orientation, orientation_angle
@@ -374,7 +374,7 @@ def detect_orientation(_landmarks_sn, args):
             )
 
 
-def detect_finger_self_occlusion(_landmarks_sn, args):
+def detect_finger_self_occlusion(_landmarks_sn, info):
     for _landmarks in _landmarks_sn.landmarks_list:
         if _landmarks.orientation == 'Front':
             wrist_tip_distance = {
@@ -397,7 +397,7 @@ def detect_finger_self_occlusion(_landmarks_sn, args):
                     _landmarks.finger_status.__dict__[k] = False
 
 
-def detect_palm_occlusion(_landmarks_sn, args):
+def detect_palm_occlusion(_landmarks_sn, info):
     # hand occlusion detection
     height, width, _ = _landmarks_sn.image.shape
     ls = _landmarks_sn.landmarks_list
@@ -414,7 +414,7 @@ def detect_palm_occlusion(_landmarks_sn, args):
         close_y0 = distant_y0 = height * 2
         close_x1 = distant_x1 = -width
         close_y1 = distant_y1 = -height
-        for i in args.landmark_order:
+        for i in info.landmark_order:
             if close.landmark.__dict__[i].x < close_x0:
                 close_x0 = close.landmark.__dict__[i].x
             if close.landmark.__dict__[i].x > close_x1:
@@ -433,7 +433,7 @@ def detect_palm_occlusion(_landmarks_sn, args):
             if distant.landmark.__dict__[i].y > distant_y1:
                 distant_y1 = distant.landmark.__dict__[i].y
 
-        if args.debug_mode.scoop_on:
+        if info.debug_mode.scoop_on:
             cv2.putText(
                 img=_landmarks_sn.image,
                 text='Close',
@@ -480,12 +480,12 @@ def detect_palm_occlusion(_landmarks_sn, args):
                 ri = int(distant.fingertip_major_axes.__dict__[ki] * 2.5)
 
                 for first, second in connections_number:
-                    x1 = int(close.landmark.__dict__[args.landmark_order[first]].x)
-                    y1 = int(close.landmark.__dict__[args.landmark_order[first]].y)
-                    x2 = int(close.landmark.__dict__[args.landmark_order[second]].x)
-                    y2 = int(close.landmark.__dict__[args.landmark_order[second]].y)
+                    x1 = int(close.landmark.__dict__[info.landmark_order[first]].x)
+                    y1 = int(close.landmark.__dict__[info.landmark_order[first]].y)
+                    x2 = int(close.landmark.__dict__[info.landmark_order[second]].x)
+                    y2 = int(close.landmark.__dict__[info.landmark_order[second]].y)
                     intersect_res = None
-                    if not (-args.EPS <= x1 - x2 <= args.EPS and -args.EPS <= y1 - y2 <= args.EPS):
+                    if not (-info.EPS <= x1 - x2 <= info.EPS and -info.EPS <= y1 - y2 <= info.EPS):
                         intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
                     else:
                         # Two points overlapping as one cannot discriminate one line.
@@ -495,7 +495,7 @@ def detect_palm_occlusion(_landmarks_sn, args):
                         distant.finger_status.__dict__[ki] = False
 
 
-def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, args):
+def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
     _image = _landmarks_sn.image
     image_height, image_width, _ = _image.shape
     mask_image = np.zeros(_image.shape, _image.dtype)
@@ -516,7 +516,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, args):
             minor_axe = int(_landmark.fingertip_minor_axes.__dict__[k])
             angle = _landmark.fingertip_angle.__dict__[k]
 
-            if args.debug_mode.output_on:
+            if info.debug_mode.output_on:
                 _text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
                 cv2.putText(
                     img=_image,
@@ -529,7 +529,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, args):
                 )
 
             if _landmark.finger_status.__dict__[k]:
-                if args.debug_mode.circle_on:
+                if info.debug_mode.circle_on:
                     cv2.ellipse(
                         img=_image,
                         center=center,
@@ -554,7 +554,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, args):
                     )
 
             else:
-                if args.debug_mode.circle_on:
+                if info.debug_mode.circle_on:
                     cv2.ellipse(
                         img=_image,
                         center=center,
@@ -576,16 +576,16 @@ def fingerprint_erase(group_number):
     prev_frame_time = 0
     curr_frame_time = 0
 
-    with open('./args.json', 'r') as f:
-        args = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+    with open('./info.json', 'r') as f:
+        info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
 
-    video_source = args.file_path
-    temp_path = os.path.join(args.folder, str(group_number))
+    video_source = info.file_path
+    temp_path = os.path.join(info.folder, str(group_number))
     if not os.path.exists(temp_path):
         os.mkdir(temp_path)
     # video_source = 0
     cap = cv2.VideoCapture(video_source)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, args.frame_jump_unit * group_number)
+    cap.set(cv2.CAP_PROP_POS_FRAMES, info.frame_jump_unit * group_number)
     proc_frames = 0
 
     mp_drawing = mediapipe.solutions.drawing_utils
@@ -593,7 +593,7 @@ def fingerprint_erase(group_number):
 
     try:
         with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
-            while proc_frames < args.frame_jump_unit:
+            while proc_frames < info.frame_jump_unit:
                 success, frame = cap.read()
 
                 if not success:
@@ -610,7 +610,7 @@ def fingerprint_erase(group_number):
 
                 # Rendering results
                 if results.multi_hand_landmarks:
-                    if args.debug_mode.landmark_on:
+                    if info.debug_mode.landmark_on:
                         for num, hand in enumerate(results.multi_hand_landmarks):
                             mp_drawing.draw_landmarks(
                                 image, hand, mp_hands.HAND_CONNECTIONS,
@@ -622,13 +622,13 @@ def fingerprint_erase(group_number):
                         timestamp=int(round(time.time() * 1000)),
                     )
 
-                    preprocess(landmarks_sn, results, image, args)
+                    preprocess(landmarks_sn, results, image, info)
 
-                    detect_orientation(landmarks_sn, args)
+                    detect_orientation(landmarks_sn, info)
 
-                    detect_finger_self_occlusion(landmarks_sn, args)
+                    detect_finger_self_occlusion(landmarks_sn, info)
 
-                    detect_palm_occlusion(landmarks_sn, args)
+                    detect_palm_occlusion(landmarks_sn, info)
 
                 else:
                     landmarks_sn = SimpleNamespace(
@@ -637,9 +637,9 @@ def fingerprint_erase(group_number):
                         image=image
                     )
 
-                process_fingertip(landmarks_sn, args.blur_mode, args.kernel_size, args)
+                process_fingertip(landmarks_sn, info.blur_mode, info.kernel_size, info)
 
-                if args.debug_mode.frame_rate_on:
+                if info.debug_mode.frame_rate_on:
                     curr_frame_time = time.time()
                     fps = int(1 / (curr_frame_time - prev_frame_time))
                     prev_frame_time = curr_frame_time

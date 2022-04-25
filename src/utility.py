@@ -18,7 +18,7 @@ def sn2dict(sn):
 
 
 def pic2video_clip(group_number):
-    with open('./args.json', 'r') as f:
+    with open('info.json', 'r') as f:
         args = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
 
     frame_path = os.path.join(args.folder, str(group_number))
