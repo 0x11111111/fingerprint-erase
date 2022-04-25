@@ -68,15 +68,17 @@ if __name__ == '__main__':
 
     info.landmark_order = 'abcdefghijklmnopqrstu'
 
-    selection = None
+    option = None
     if len(sys.argv) <= 1:
         # No command line arguments
-        selection = get_option()
-        selection = SimpleNamespace(**selection)
+        option = get_option()
+        option = SimpleNamespace(**option)
+        info.option = option
     else:
         # Options fetched from file in argv[1]
         with open(sys.argv[1], 'r') as f:
-            selection = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+            info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
+            option = info.option
             f.close()
 
     performance_attributes = SimpleNamespace(
@@ -85,35 +87,35 @@ if __name__ == '__main__':
     print('Initial time: {}'.format(
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_initial_start))))
 
-    info.file_path = selection.file_path
+    info.file_path = option.file_path
     # Kernel size of Gaussian should be odd only
-    info.kernel_size = int(selection.blur_value // 2 * 2 + 1)
+    info.kernel_size = int(option.blur_value // 2 * 2 + 1)
 
     info.blur_mode = 0
-    if selection.normalization:
+    if option.normalization:
         info.blur_mode = 1
-    elif selection.gaussian:
+    elif option.gaussian:
         info.blur_mode = 2
 
     codec = None
     video_extension = None
     # 'mpeg4': True, 'libx264': False, 'rawvideo': False, 'png': False, 'libvpx': False, 'libvorbis': False
-    if selection.mpeg4:
+    if option.mpeg4:
         codec = 'mpeg4'
         video_extension = '.mp4'
-    elif selection.libx264:
+    elif option.libx264:
         codec = 'libx264'
         video_extension = '.mp4'
-    elif selection.rawvideo:
+    elif option.rawvideo:
         codec = 'rawvideo'
         video_extension = '.avi'
-    elif selection.png:
+    elif option.png:
         codec = 'png'
         video_extension = '.avi'
-    elif selection.libvpx:
+    elif option.libvpx:
         codec = 'libvpx'
         video_extension = '.webm'
-    elif selection.libvorbis:
+    elif option.libvorbis:
         codec = 'libvorbis'
         video_extension = '.ogv'
 
@@ -130,12 +132,11 @@ if __name__ == '__main__':
     audio = video.audio
 
     performance_attributes.threads = info.num_processes = mp.cpu_count()
-    if selection.single_process or selection.single_thread:
+    if option.single_process or option.single_thread:
         performance_attributes.threads = info.num_processes = 1
     info.frame_jump_unit = frame_count // info.num_processes
 
     info_dict = sn2dict(info)
-
     with open('./info.json', 'w') as f:
         json.dump(info_dict, f)
         f.close()
@@ -146,7 +147,7 @@ if __name__ == '__main__':
     print('Time elapsed: {}s'.format(
         performance_attributes.time_erase_start - performance_attributes.time_initial_start))
 
-    if selection.multi_process or selection.single_process:
+    if option.multi_process or option.single_process:
         pool = mp.Pool(info.num_processes)
         pool.map_async(fingerprint_erase, range(info.num_processes))
         pool.close()
