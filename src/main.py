@@ -11,6 +11,8 @@ import sys
 import multiprocessing as mp
 
 from types import SimpleNamespace
+
+from ffmpeg import overwrite_output
 from moviepy.editor import VideoFileClip, concatenate_videoclips, CompositeVideoClip
 
 from gui_get_option import get_option
@@ -20,10 +22,10 @@ from utility import sn2dict, pic2video_clip
 clip_list = []
 
 
-# Callback function to retrieve results from threadpool results.
-def get_clip_result(requests, res):
-    global clip_list
-    clip_list.append(res)
+# # Callback function to retrieve results from threadpool results.
+# def get_clip_result(requests, res):
+#     global clip_list
+#     clip_list.append(res)
 
 
 if __name__ == '__main__':
@@ -95,27 +97,33 @@ if __name__ == '__main__':
     elif option.gaussian:
         info.blur_mode = 2
 
+    video_extension = '.mp4'
+
+    preset = None
+    if option.ultrafast:
+        preset = 'ultrafast'
+    elif option.superfast:
+        preset = 'superfast'
+    elif option.faster:
+        preset = 'faster'
+    elif option.fast:
+        preset = 'fast'
+    elif option.medium:
+        preset = 'medium'
+    elif option.slow:
+        preset = 'slow'
+    elif option.slower:
+        preset = 'slower'
+    elif option.veryslow:
+        preset = 'veryslow'
+    option.preset = preset
+
     codec = None
-    video_extension = None
-    # 'mpeg4': True, 'libx264': False, 'rawvideo': False, 'png': False, 'libvpx': False, 'libvorbis': False
-    if option.mpeg4:
-        codec = 'mpeg4'
-        video_extension = '.mp4'
-    elif option.libx264:
-        codec = 'libx264'
-        video_extension = '.mp4'
-    elif option.rawvideo:
-        codec = 'rawvideo'
-        video_extension = '.avi'
-    elif option.png:
-        codec = 'png'
-        video_extension = '.avi'
-    elif option.libvpx:
-        codec = 'libvpx'
-        video_extension = '.webm'
-    elif option.libvorbis:
-        codec = 'libvorbis'
-        video_extension = '.ogv'
+    if option.h265:
+        codec = 'libx265'
+    elif option.h264:
+        codec = 'h264'
+    option.codec = codec
 
     cap = cv2.VideoCapture(info.file_path)
     frame_count = performance_attributes.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -123,11 +131,11 @@ if __name__ == '__main__':
     performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     info.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
 
-    video = VideoFileClip(info.file_path)
-    # frame_count = video.reader.nframes
-    # frame_rate = video.fps
-    # info.fps = frame_rate
-    audio = video.audio
+    # video = VideoFileClip(info.file_path)
+    # # frame_count = video.reader.nframes
+    # # frame_rate = video.fps
+    # # info.fps = frame_rate
+    # audio = video.audio
 
     performance_attributes.threads = info.num_processes = mp.cpu_count()
     if option.single_process or option.single_thread:
@@ -162,14 +170,21 @@ if __name__ == '__main__':
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_compile_start))))
     print('Time elapsed: {}s'.format(
         performance_attributes.time_compile_start - performance_attributes.time_initial_start))
-    pool = threadpool.ThreadPool(info.num_processes)
-    requests = threadpool.makeRequests(pic2video_clip, range(info.num_processes), get_clip_result)
-    [pool.putRequest(req) for req in requests]
-    pool.wait()
 
-    clip_list.sort(key=lambda x: x[0])
+    source_video = ffmpeg.input(option.file_path)
+    audio = source_video.audio
+    # clip_list = []
+    # for i in range(info.num_processes):
+    #     clip_list.append(pic2video_clip(i))
+
     # print(clip_list)
-    clip_to_concat = [tup[1] for tup in clip_list]
+    # pool = threadpool.ThreadPool(info.num_processes)
+    # requests = threadpool.makeRequests(pic2video_clip, range(info.num_processes), get_clip_result)
+    # [pool.putRequest(req) for req in requests]
+    # pool.wait()
+
+    # print(clip_list)
+    # clip_to_concat = [tup[1] for tup in clip_list]
     # print(clip_to_concat)
 
     performance_attributes.time_concat_start = int(time.time())
@@ -177,51 +192,86 @@ if __name__ == '__main__':
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_concat_start))))
     print('Time elapsed: {}s'.format(
         performance_attributes.time_concat_start - performance_attributes.time_initial_start))
-    concat = concatenate_videoclips(clip_to_concat)
-    frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
-    fps = frame_rate = cap.get(cv2.CAP_PROP_FPS)
-    duration = math.floor(frames / fps)
-    concat = concat.subclip(0, duration)
+
+    frame_path = os.path.abspath(os.path.join(info.folder, '*.jpeg'))
+    dst_path = '.'
+    if not os.path.exists(dst_path):
+        os.mkdir(dst_path)
+    output_file_path = os.path.abspath(os.path.join(dst_path, 'erased' + video_extension))
+
+    print(output_file_path)
+    output_video = (
+        ffmpeg
+        .input(frame_path, pattern_type='glob', framerate=info.fps)
+
+
+
+    )
+    output_video = (
+        ffmpeg
+        .concat(output_video, audio, v=1, a=1)
+        .output(output_file_path, vcodec=codec, threads=mp.cpu_count(), preset=preset)
+        .global_args('-loglevel', 'quiet')
+    )
+    print(output_video.get_args())
+
+    # clip_list.sort(key=lambda x: x[0])
+    # video = ffmpeg.input(clip_list[0][1])
+    # for i in range(1, info.num_processes):
+    #     video = ffmpeg.concat(video, ffmpeg.input(clip_list[i][1]), v=1)
+
+    # concat = concatenate_videoclips(clip_to_concat)
+    # frames = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+    # fps = frame_rate = cap.get(cv2.CAP_PROP_FPS)
+    # duration = math.floor(frames / fps)
+    # concat = concat.subclip(0, duration)
     # Get rid of the last frame which may cause IndexError Exception. Bug caused by moviepy
-    concat = concat.subclip(t_end=(concat.duration - 10.0 / concat.fps))
+    # concat = concat.subclip(t_end=(concat.duration - 10.0 / concat.fps))
 
     performance_attributes.time_output_start = int(time.time())
     print('Output start time: {}'.format(
         time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_output_start))))
     print('Time elapsed: {}s'.format(
         performance_attributes.time_output_start - performance_attributes.time_initial_start))
-    dst_path = '.'
-    audio = audio.subclip(0, concat.duration)
-    audio.write_audiofile(
-        filename=dst_path + '/output' + '.wav',
-    )
 
-    concat.set_audio(audio)
-    if not os.path.exists(dst_path):
-        os.mkdir(dst_path)
-    concat.write_videofile(
-        filename=dst_path + '/output' + video_extension,
-        codec=codec,
-        threads=info.num_processes
-    )
+    output_video.run(overwrite_output=True)
+    # test = (
+    #     ffmpeg
+    #     .concat(video, audio, v=1, a=1)
+    #     .output(output_file_path, vcodec=codec, threads=mp.cpu_count(), preset=preset)
+    #     .global_args('-loglevel', 'quiet')
+    # )
+    # print(test.get_args())
+    # test.run(overwrite_output=True)
+    # audio = audio.subclip(0, concat.duration)
+    # audio.write_audiofile(
+    #     filename=dst_path + '/output' + '.wav',
+    # )
+
+    # concat.set_audio(audio)
+    # concat.write_videofile(
+    #     filename=dst_path + '/output' + video_extension,
+    #     codec=codec,
+    #     threads=info.num_processes
+    # )
     cap.release()
-    video.close()
+    # video.close()
 
-    video_file_path = os.path.abspath(dst_path + '/output' + video_extension)
-    audio_file_path = os.path.abspath(dst_path + '/output' + '.wav')
-    output_file_path = os.path.abspath(dst_path + '/blurred' + video_extension)
-    if platform.system() == 'Linux':
-        input_video = ffmpeg.input(video_file_path)
-        input_audio = ffmpeg.input(audio_file_path)
-        (
-            ffmpeg
-            .concat(input_video, input_audio, v=1, a=1)
-            .output(output_file_path)
-            .run(overwrite_output=True)
-        )
-    else:
-        # Windows encounters file path errors.
-        subprocess.run(f"ffmpeg -i {video_file_path} -i {audio_file_path} -y {output_file_path}")
+    # video_file_path = os.path.abspath(dst_path + '/output' + video_extension)
+    # audio_file_path = os.path.abspath(dst_path + '/output' + '.wav')
+    # output_file_path = os.path.abspath(dst_path + '/blurred' + video_extension)
+    # if platform.system() == 'Linux':
+    #     input_video = ffmpeg.input(video_file_path)
+    #     input_audio = ffmpeg.input(audio_file_path)
+    #     (
+    #         ffmpeg
+    #         .concat(input_video, input_audio, v=1, a=1)
+    #         .output(output_file_path)
+    #         .run(overwrite_output=True)
+    #     )
+    # else:
+    #     # Windows encounters file path errors.
+    #     subprocess.run(f"ffmpeg -i {video_file_path} -i {audio_file_path} -y {output_file_path}")
 
     performance_attributes.time_finish = int(time.time())
     print('ALL ACCOMPLISHED')

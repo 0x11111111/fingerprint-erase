@@ -23,13 +23,20 @@ def get_option():
             sg.Radio(key='nope', text='不处理', group_id='Blur_option')
         ],
         [
-            sg.Text('输出画质'),
-            sg.Radio(key='mpeg4', text='mpeg4(.mp4) 低画质', group_id='codec', default=True),
-            sg.Radio(key='libx264', text='libx264(.mp4) 中画质', group_id='codec'),
-            sg.Radio(key='rawvideo', text='rawvideo(.avi) 高画质', group_id='codec'),
-            sg.Radio(key='png', text='png(.avi) 高画质', group_id='codec'),
-            sg.Radio(key='libvpx', text='libvpx(.webm) 网页', group_id='codec'),
-            sg.Radio(key='libvorbis', text='libvorbis(.ogv) 网页', group_id='codec')
+            sg.Text('编码格式'),
+            sg.Radio(key='h265', text='H.265', group_id='codec', default=True),
+            sg.Radio(key='h264', text='H.264', group_id='codec')
+        ],
+        [
+            sg.Text('输出速度'),
+            sg.Radio(key='ultrafast', text='ultrafast', group_id='preset'),
+            sg.Radio(key='superfast', text='superfast', group_id='preset'),
+            sg.Radio(key='faster', text='faster', group_id='preset'),
+            sg.Radio(key='fast', text='fast', group_id='preset', default=True),
+            sg.Radio(key='medium', text='medium', group_id='preset'),
+            sg.Radio(key='slow', text='slow', group_id='preset'),
+            sg.Radio(key='slower', text='slower', group_id='preset'),
+            sg.Radio(key='veryslow', text='veryslow', group_id='preset'),
         ],
         [
             sg.Text('处理加速'),

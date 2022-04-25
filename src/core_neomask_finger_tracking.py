@@ -581,7 +581,7 @@ def fingerprint_erase(group_number):
         f.close()
 
     video_source = info.file_path
-    temp_path = os.path.join(info.folder, str(group_number))
+    temp_path = info.folder
     if not os.path.exists(temp_path):
         os.mkdir(temp_path)
     # video_source = 0
@@ -655,7 +655,10 @@ def fingerprint_erase(group_number):
                     )
 
                 processed_image = landmarks_sn.image
-                cv2.imwrite(os.path.join(temp_path, '{}.jpeg'.format(landmarks_sn.timestamp)), processed_image)
+                cv2.imwrite(
+                    os.path.join(temp_path, '{}{}.jpeg'.format(group_number, landmarks_sn.timestamp)),
+                    processed_image
+                )
                 # cv2.imshow('Hand Tracking', processed_image)
 
                 proc_frames += 1
