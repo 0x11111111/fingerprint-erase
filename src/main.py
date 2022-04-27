@@ -32,11 +32,11 @@ if __name__ == '__main__':
     info.folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
 
     info.debug_mode = SimpleNamespace(
-        circle_on=True,
+        circle_on=False,
         landmark_on=False,
         coordination_on=False,
         output_on=False,
-        orientation_on=True,
+        orientation_on=False,
         frame_rate_on=False,
         scoop_on=False,
     )

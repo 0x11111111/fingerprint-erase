@@ -2,7 +2,6 @@ import cv2
 import os
 import time
 import mediapipe
-import math
 import json
 import numpy as np
 
@@ -276,6 +275,7 @@ def detect_orientation(_landmarks_sn, info):
         thumb_cmc_wrist_deg = np.rad2deg(np.arctan2(thumb_cmc[1] - wrist[1], thumb_cmc[0] - wrist[0]))
         pinky_mcp_wrist_deg = np.rad2deg(np.arctan2(pinky_mcp[1] - wrist[1], pinky_mcp[0] - wrist[0]))
         orientation_angle = thumb_cmc_wrist_deg - pinky_mcp_wrist_deg
+        t_p_angle = orientation_angle
         if orientation_angle < -180:
             orientation_angle += 360
         elif orientation_angle > 180:
@@ -296,8 +296,8 @@ def detect_orientation(_landmarks_sn, info):
 
         if info.debug_mode.orientation_on:
             coord1 = (int(wrist[0]) + 10, int(wrist[1]))
-            _text = 'orientation: {} angle: {}'.format(
-                _landmarks.orientation, orientation_angle
+            _text = 'orientation: {} t_p_angle: {:.5f}'.format(
+                _landmarks.orientation, t_p_angle
             )
             cv2.putText(
                 img=_landmarks_sn.image,
@@ -306,11 +306,11 @@ def detect_orientation(_landmarks_sn, info):
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
                 fontScale=1,
                 color=(0x00, 0x00, 0xFF),
-                thickness=1
+                thickness=2
             )
 
-            coord2 = (int(wrist[0]) + 10, int(wrist[1]) + 15)
-            _text = 't_w: {} p_w: {}'.format(
+            coord2 = (int(wrist[0]) + 10, int(wrist[1]) + 40)
+            _text = 't_w: {:.3f} p_w: {:.3f}'.format(
                 thumb_cmc_wrist_deg, pinky_mcp_wrist_deg
             )
             cv2.putText(
@@ -320,7 +320,7 @@ def detect_orientation(_landmarks_sn, info):
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
                 fontScale=1,
                 color=(0x00, 0x00, 0xFF),
-                thickness=1
+                thickness=2
             )
 
 
