@@ -32,11 +32,11 @@ if __name__ == '__main__':
     info.folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
 
     info.debug_mode = SimpleNamespace(
-        circle_on=False,
+        circle_on=True,
         landmark_on=False,
         coordination_on=False,
         output_on=False,
-        orientation_on=False,
+        orientation_on=True,
         frame_rate_on=False,
         scoop_on=False,
     )
@@ -46,23 +46,9 @@ if __name__ == '__main__':
     os.mkdir(info.folder)
 
     info.EPS = 0.0001
-    info.fingertip_radius_sn = SimpleNamespace(
-        thumb=20.0,
-        index=18.4,
-        middle=18.3,
-        ring=17.3,
-        pinky=15.3
-    )
-    info.finger_length_sn = SimpleNamespace(
-        thumb=32.1,
-        index=24.7,
-        middle=26.4,
-        ring=26.3,
-        pinky=23.7
-    )
-    info.tip_dip_length_ratio = 0.8
+    info.tip_dip_length_ratio = 0.7
     info.pinky_ring_width_ratio = 0.89
-    info.thumb_width_length_ratio = 0.60
+    info.thumb_width_length_ratio = 0.62
     info.finger_mcp_width_ratio = 0.65
 
     info.landmark_order = 'abcdefghijklmnopqrstu'

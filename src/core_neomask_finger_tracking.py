@@ -5,59 +5,9 @@ import mediapipe
 import math
 import json
 import numpy as np
+
 from types import SimpleNamespace
-
-
-def calculate_distance_sn(coord_sn_1, coord_sn_2):
-    return math.sqrt((coord_sn_1.x - coord_sn_2.x) ** 2 + (coord_sn_1.y - coord_sn_2.y) ** 2)
-
-
-def calculate_distance_array(coord_array_1, coord_array_2):
-    return math.sqrt((coord_array_1[0] - coord_array_2[0]) ** 2 + (coord_array_1[1] - coord_array_2[1]) ** 2)
-
-
-def intersect_line_circle(circle_center, circle_radius, pt1, pt2, full_line=False, tangent_tol=1e-4):
-    """ Find the points at which a circle intersects a line-segment.  This can happen at 0, 1, or 2 points.
-
-    param circle_center: The (x, y) location of the circle center
-    param circle_radius: The radius of the circle
-    param pt1: The (x, y) location of the first point of the segment
-    param pt2: The (x, y) location of the second point of the segment
-    param full_line: True to find intersections along full line - not just in the segment.  False will just
-        return intersections within the segment.
-    param tangent_tol: Numerical tolerance at which we decide the intersections are close enough to
-        consider it a tangent
-    return Sequence[Tuple[float, float]]: A list of length 0, 1, or 2, where each element is a point at
-        which the circle intercepts a line segment.
-
-    """
-
-    (p1x, p1y), (p2x, p2y), (cx, cy) = pt1, pt2, circle_center
-    (x1, y1), (x2, y2) = (p1x - cx, p1y - cy), (p2x - cx, p2y - cy)
-    dx, dy = (x2 - x1), (y2 - y1)
-    dr = (dx ** 2 + dy ** 2) ** 0.5
-    big_d = x1 * y2 - x2 * y1
-    discriminant = circle_radius ** 2 * dr ** 2 - big_d ** 2
-
-    if discriminant < 0:  # No intersection between circle and line
-        return []
-    else:  # There may be 0, 1, or 2 intersections with the segment
-        intersections = [
-            (cx + (big_d * dy + sign * (-1 if dy < 0 else 1) * dx * discriminant ** 0.5) / dr ** 2,
-             cy + (-big_d * dx + sign * abs(dy) * discriminant ** 0.5) / dr ** 2)
-            for sign in ((1, -1) if dy < 0 else (-1, 1))
-        ]  # This makes sure the order along the segment is correct
-        if not full_line:
-            # If only considering the segment, filter out intersections that do not fall within the segment
-            fraction_along_segment = [(xi - p1x) / dx if abs(dx) > abs(dy) else (yi - p1y) / dy for xi, yi in
-                                      intersections]
-            intersections = [pt for pt, frac in zip(intersections, fraction_along_segment) if 0 <= frac <= 1]
-        if len(intersections) == 2 and abs(
-                discriminant) <= tangent_tol:
-            # If line is tangent to circle, return just one point (as both intersections have same location)
-            return [intersections[0]]
-        else:
-            return intersections
+from utility import calculate_distance_sn, calculate_distance_array, intersect_line_circle
 
 
 def preprocess(_landmarks_sn, res, _image, info):
@@ -243,10 +193,10 @@ def preprocess(_landmarks_sn, res, _image, info):
             ring_pinky=calculate_distance_sn(_landmarks.fingers.ring.mcp, _landmarks.fingers.pinky.mcp)
         )
 
-        _landmarks.fingertip_distance_aggregated = _landmarks.mcp_width.index_middle + \
+        _landmarks.mcp_width_sum = _landmarks.mcp_width.index_middle + \
             _landmarks.mcp_width.middle_ring + _landmarks.mcp_width.ring_pinky
 
-        _landmarks.fingertip_major_axes = SimpleNamespace(
+        _landmarks.fingertip_minor_axe = SimpleNamespace(
             thumb=calculate_distance_sn(
                 _landmarks.fingers.thumb.mcp,
                 _landmarks.fingers.thumb.ip
@@ -278,20 +228,20 @@ def preprocess(_landmarks_sn, res, _image, info):
         ring_tip_dip_distance = calculate_distance_array(ring_tip, ring_dip)
         pinky_tip_dip_distance = calculate_distance_array(pinky_tip, pinky_dip)
 
-        _landmarks.fingertip_minor_axes = SimpleNamespace(
-            thumb=(_landmarks.fingertip_major_axes.thumb + thumb_tip_ip_distance) * 0.5,
-            index=(_landmarks.fingertip_major_axes.index + index_tip_dip_distance) * 0.5,
-            middle=(_landmarks.fingertip_major_axes.middle + middle_tip_dip_distance) * 0.5,
-            ring=(_landmarks.fingertip_major_axes.ring + ring_tip_dip_distance) * 0.5,
-            pinky=(_landmarks.fingertip_major_axes.pinky + pinky_tip_dip_distance) * 0.5
+        _landmarks.fingertip_major_axe = SimpleNamespace(
+            thumb=(_landmarks.fingertip_minor_axe.thumb + thumb_tip_ip_distance) * 0.5,
+            index=(_landmarks.fingertip_minor_axe.index + index_tip_dip_distance) * 0.5,
+            middle=(_landmarks.fingertip_minor_axe.middle + middle_tip_dip_distance) * 0.5,
+            ring=(_landmarks.fingertip_minor_axe.ring + ring_tip_dip_distance) * 0.5,
+            pinky=(_landmarks.fingertip_minor_axe.pinky + pinky_tip_dip_distance) * 0.5
         )
 
         _landmarks.fingertip_angle = SimpleNamespace(
-            thumb=np.rad2deg(np.arctan2(thumb_tip[1] - thumb_ip[1], thumb_tip[0] - thumb_ip[0])) + 90,
-            index=np.rad2deg(np.arctan2(index_tip[1] - index_dip[1], index_tip[0] - index_dip[0])) + 90,
-            middle=np.rad2deg(np.arctan2(middle_tip[1] - middle_dip[1], middle_tip[0] - middle_dip[0])) + 90,
-            ring=np.rad2deg(np.arctan2(ring_tip[1] - ring_dip[1], ring_tip[0] - ring_dip[0])) + 90,
-            pinky=np.rad2deg(np.arctan2(pinky_tip[1] - pinky_dip[1], pinky_tip[0] - pinky_dip[0])) + 90
+            thumb=np.rad2deg(np.arctan2(thumb_tip[1] - thumb_ip[1], thumb_tip[0] - thumb_ip[0])),
+            index=np.rad2deg(np.arctan2(index_tip[1] - index_dip[1], index_tip[0] - index_dip[0])),
+            middle=np.rad2deg(np.arctan2(middle_tip[1] - middle_dip[1], middle_tip[0] - middle_dip[0])),
+            ring=np.rad2deg(np.arctan2(ring_tip[1] - ring_dip[1], ring_tip[0] - ring_dip[0])),
+            pinky=np.rad2deg(np.arctan2(pinky_tip[1] - pinky_dip[1], pinky_tip[0] - pinky_dip[0]))
         )
 
         _landmarks_sn.landmarks_list.append(_landmarks)
@@ -404,7 +354,7 @@ def detect_palm_occlusion(_landmarks_sn, info):
     mp_hands = mediapipe.solutions.hands
 
     if len(ls) > 1:
-        if ls[0].fingertip_distance_aggregated > ls[1].fingertip_distance_aggregated:
+        if ls[0].mcp_width_sum > ls[1].mcp_width_sum:
             close, distant = ls[0], ls[1]
         else:
             close, distant = ls[1], ls[0]
@@ -477,7 +427,7 @@ def detect_palm_occlusion(_landmarks_sn, info):
 
             for ki, vi in distant.fingers.__dict__.items():
                 xi, yi = int(vi.tip.x * 0.7 + vi.dip.x * 0.3), int(vi.tip.y * 0.7 + vi.dip.y * 0.3)
-                ri = int(distant.fingertip_major_axes.__dict__[ki] * 2.5)
+                ri = int(distant.fingertip_minor_axe.__dict__[ki] * 2.5)
 
                 for first, second in connections_number:
                     x1 = int(close.landmark.__dict__[info.landmark_order[first]].x)
@@ -512,8 +462,8 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
     for _landmark in _landmarks_sn.landmarks_list:
         for k, v in _landmark.fingers.__dict__.items():
             center = (int(v.tip.x * 0.7 + v.dip.x * 0.3), int(v.tip.y * 0.7 + v.dip.y * 0.3))
-            major_axe = int(_landmark.fingertip_major_axes.__dict__[k])
-            minor_axe = int(_landmark.fingertip_minor_axes.__dict__[k])
+            minor_axe = int(_landmark.fingertip_minor_axe.__dict__[k])
+            major_axe = int(_landmark.fingertip_major_axe.__dict__[k])
             angle = _landmark.fingertip_angle.__dict__[k]
 
             if info.debug_mode.output_on:

@@ -9,6 +9,7 @@ from types import SimpleNamespace
 from gui_get_option import get_option
 from __init__ import __version__
 
+
 @deprecated(
     "Use core_neomask_finger_tracking instead."
 )
