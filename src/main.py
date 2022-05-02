@@ -6,11 +6,11 @@ import json
 import ffmpeg
 import platform
 import sys
-import multiprocessing as mp
-
+import multiprocessing
 from types import SimpleNamespace
 from gui_get_option import get_option
-from core_neomask_finger_tracking import fingerprint_erase
+from delegation_multi_process import multi_process_fingerprint_erase
+from delegation_realtime_process import *
 from utility import sn2dict
 
 
@@ -29,16 +29,23 @@ if __name__ == '__main__':
             option = info.option
             f.close()
     # Spawn a new temporary file folder
-    info.folder = os.path.join('../.tmp', '{}'.format(int(round(time.time() * 1000))))
+    info.folder = os.path.join('../.tmp', '{}'.format(int(time.time() * 1000)))
 
-    info.debug_mode = SimpleNamespace(
+    info.flags = SimpleNamespace(
+        # 核心指纹圈
         circle_on=False,
-        landmark_on=False,
+        # 关键点连线
+        connection_on=False,
+        # 坐标显示
         coordination_on=False,
+        # 指纹核心参数
         output_on=False,
+        # 手掌朝向
         orientation_on=False,
+        # 帧率
         frame_rate_on=False,
-        scoop_on=False,
+        # 手掌包络框
+        box_on=False,
     )
 
     if not os.path.exists("../.tmp"):
@@ -50,7 +57,6 @@ if __name__ == '__main__':
     info.pinky_ring_width_ratio = 0.89
     info.thumb_width_length_ratio = 0.62
     info.finger_mcp_width_ratio = 0.65
-
     info.landmark_order = 'abcdefghijklmnopqrstu'
 
     performance_attributes = SimpleNamespace(
@@ -62,12 +68,17 @@ if __name__ == '__main__':
     info.file_path = option.file_path
     # Kernel size of Gaussian should be odd only
     info.kernel_size = int(option.blur_value // 2 * 2 + 1)
+    info.camera_input_no = int(option.camera_input_no)
 
-    info.blur_mode = 0
-    if option.normalization:
-        info.blur_mode = 1
+    info.blur_mode = 'nope'
+    if option.averaging:
+        info.blur_mode = 'averaging'
     elif option.gaussian:
-        info.blur_mode = 2
+        info.blur_mode = 'gaussian'
+    elif option.median:
+        info.blur_mode = 'median'
+    elif option.bilateral:
+        info.blur_mode = 'bilateral'
 
     video_extension = '.mp4'
 
@@ -97,16 +108,26 @@ if __name__ == '__main__':
         codec = 'h264'
     option.codec = codec
 
-    cap = cv2.VideoCapture(info.file_path)
-    frame_count = performance_attributes.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    performance_attributes.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    info.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
+    if info.camera_input_no < 0:
+        # Input from video file
+        cap = cv2.VideoCapture(info.file_path)
+        info.frame_count = performance_attributes.frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        info.width = performance_attributes.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        info.height = performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        info.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
+        cap.release()
 
-    performance_attributes.threads = info.num_processes = mp.cpu_count()
+    else:
+        # Input from camera stream
+        cap = cv2.VideoCapture(info.camera_input_no)
+        info.width = performance_attributes.frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        info.height = performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        cap.release()
+
+    performance_attributes.threads = info.num_processes = os.cpu_count()
     if option.single_process or option.single_thread:
         performance_attributes.threads = info.num_processes = 1
-    info.frame_jump_unit = frame_count // info.num_processes
+    info.frame_jump_unit = info.frame_count // info.num_processes
 
     info_dict = sn2dict(info)
     with open('./info.json', 'w') as f:
@@ -120,22 +141,16 @@ if __name__ == '__main__':
         performance_attributes.time_erase_start - performance_attributes.time_initial_start))
 
     if option.multi_process or option.single_process:
-        pool = mp.Pool(info.num_processes)
-        pool.map_async(fingerprint_erase, range(info.num_processes))
+        pool = multiprocessing.Pool(info.num_processes)
+        pool.map_async(multi_process_fingerprint_erase, range(info.num_processes))
         pool.close()
         pool.join()
 
-    else:
+    elif option.multi_thread or option.single_thread:
         pool = threadpool.ThreadPool(info.num_processes)
-        requests = threadpool.makeRequests(fingerprint_erase, range(info.num_processes))
+        requests = threadpool.makeRequests(multi_process_fingerprint_erase, range(info.num_processes))
         [pool.putRequest(req) for req in requests]
         pool.wait()
-
-    performance_attributes.time_compile_start = int(time.time())
-    print('Compile start time: {}'.format(
-        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_compile_start))))
-    print('Time elapsed: {}s'.format(
-        performance_attributes.time_compile_start - performance_attributes.time_initial_start))
 
     source_video = ffmpeg.input(option.file_path)
     audio = source_video.audio
@@ -173,7 +188,7 @@ if __name__ == '__main__':
     output_video = (
         ffmpeg
         .concat(output_video, audio, v=1, a=1)
-        .output(output_file_path, vcodec=codec, threads=mp.cpu_count(), preset=preset)
+        .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
         .global_args('-loglevel', 'quiet')
     )
 
@@ -184,17 +199,14 @@ if __name__ == '__main__':
         performance_attributes.time_output_start - performance_attributes.time_initial_start))
 
     output_video.run(overwrite_output=True)
-    cap.release()
 
     performance_attributes.time_finish = int(time.time())
     print('ALL ACCOMPLISHED')
     print('Output file: {}'.format(output_file_path))
     print('Stage time consumption:')
     print('- Erasing fingertips: {}s'.format(
-        performance_attributes.time_compile_start - performance_attributes.time_erase_start))
-    print('- Compiling frames into video clips: {}s'.format(
-        performance_attributes.time_concat_start - performance_attributes.time_compile_start))
-    print('- Concatenating each video clips: {}s'.format(
+        performance_attributes.time_concat_start - performance_attributes.time_erase_start))
+    print('- Concatenating each images: {}s'.format(
         performance_attributes.time_output_start - performance_attributes.time_concat_start))
     print('- Output final video: {}s'.format(
         performance_attributes.time_finish - performance_attributes.time_output_start))
@@ -205,4 +217,4 @@ if __name__ == '__main__':
     print('- Frames size: {} x {}'.format(performance_attributes.frame_width, performance_attributes.frame_height))
     print('- Video frame rate: {}FPS'.format(performance_attributes.frame_rate))
     print('- Average frame processing rate: {:.3f}FPS'.format(performance_attributes.frame_count / (
-            performance_attributes.time_compile_start - performance_attributes.time_erase_start)))
+            performance_attributes.time_concat_start - performance_attributes.time_erase_start)))

@@ -9,4 +9,4 @@ __author__ = "0x11111111 (dypro_mike@outlook.com)"
 __version__ = "1.0.0"
 __license__ = "Apache License, Version 2.0"
 
-__all__ = ['core_neomask_finger_tracking']
+__all__ = ['core_finger_processor.py']

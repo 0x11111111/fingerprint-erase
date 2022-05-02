@@ -1,8 +1,5 @@
 import cv2
-import os
-import time
 import mediapipe
-import json
 import numpy as np
 
 from types import SimpleNamespace
@@ -245,7 +242,7 @@ def preprocess(_landmarks_sn, res, _image, info):
 
         _landmarks_sn.landmarks_list.append(_landmarks)
 
-        if info.debug_mode.coordination_on:
+        if info.flags.coordination_on:
             _text = f'handedness: {_landmarks.handedness}\n'
             for k, v in _landmarks.fingers.__dict__.items():
                 _text += '{} tip: ({:.3f}, {:.3f}, {:.6f})\n'.format(k, v.tip.x, v.tip.y, v.tip.z)
@@ -258,7 +255,7 @@ def preprocess(_landmarks_sn, res, _image, info):
                     fontFace=cv2.FONT_HERSHEY_PLAIN,
                     fontScale=1,
                     color=(0x00, 0x00, 0xFF),
-                    thickness=1
+                    thickness=2
                 )
                 _yy += _dy
 
@@ -294,7 +291,7 @@ def detect_orientation(_landmarks_sn, info):
                 pinky=False
             )
 
-        if info.debug_mode.orientation_on:
+        if info.flags.orientation_on:
             coord1 = (int(wrist[0]) + 10, int(wrist[1]))
             _text = 'orientation: {} t_p_angle: {:.5f}'.format(
                 _landmarks.orientation, t_p_angle
@@ -316,7 +313,7 @@ def detect_orientation(_landmarks_sn, info):
             cv2.putText(
                 img=_landmarks_sn.image,
                 text=_text,
-                org=coord2,
+            org=coord2,
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
                 fontScale=1,
                 color=(0x00, 0x00, 0xFF),
@@ -383,15 +380,15 @@ def detect_palm_occlusion(_landmarks_sn, info):
             if distant.landmark.__dict__[i].y > distant_y1:
                 distant_y1 = distant.landmark.__dict__[i].y
 
-        if info.debug_mode.scoop_on:
+        if info.flags.box_on:
             cv2.putText(
                 img=_landmarks_sn.image,
                 text='Close',
                 org=(int(close_x0) + 10, int(close_y0) + 10),
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
-                fontScale=1,
+                fontScale=2,
                 color=(0x00, 0x00, 0xFF),
-                thickness=1
+                thickness=2
             )
             cv2.rectangle(
                 img=_landmarks_sn.image,
@@ -405,9 +402,9 @@ def detect_palm_occlusion(_landmarks_sn, info):
                 text='Distant',
                 org=(int(distant_x0) + 10, int(distant_y0) + 10),
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
-                fontScale=1,
+                fontScale=2,
                 color=(0x00, 0x00, 0xFF),
-                thickness=1
+                thickness=2
             )
             cv2.rectangle(
                 img=_landmarks_sn.image,
@@ -436,7 +433,7 @@ def detect_palm_occlusion(_landmarks_sn, info):
                     y2 = int(close.landmark.__dict__[info.landmark_order[second]].y)
                     intersect_res = None
                     if not (-info.EPS <= x1 - x2 <= info.EPS and -info.EPS <= y1 - y2 <= info.EPS):
-                        intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
+                        intersect_res = intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
                     else:
                         # Two points overlapping as one cannot discriminate one line.
                         return (xi - x1) ** 2 + (yi - y1) ** 2 <= ri ** 2
@@ -450,13 +447,15 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
     image_height, image_width, _ = _image.shape
     mask_image = np.zeros(_image.shape, _image.dtype)
 
-    if _blur_mode == 1:
+    if _blur_mode == 'averaging':
         blur_source_image = cv2.blur(_image, (_kernel_size, _kernel_size))
-
-    elif _blur_mode == 2:
+    elif _blur_mode == 'gaussian':
         blur_source_image = cv2.GaussianBlur(_image, (_kernel_size, _kernel_size), 0)
-
-    else:
+    elif _blur_mode == 'median':
+        blur_source_image = cv2.medianBlur(_image, _kernel_size)
+    elif _blur_mode == 'bilateral':
+        blur_source_image = cv2.bilateralFilter(_image, _kernel_size, _kernel_size * 2, _kernel_size * 2)
+    elif _blur_mode == 'nope':
         blur_source_image = None
 
     for _landmark in _landmarks_sn.landmarks_list:
@@ -466,7 +465,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
             major_axe = int(_landmark.fingertip_major_axe.__dict__[k])
             angle = _landmark.fingertip_angle.__dict__[k]
 
-            if info.debug_mode.output_on:
+            if info.flags.output_on:
                 _text = 'Major: {}, minor: {}, angle: {:.3f}'.format(major_axe, minor_axe, angle)
                 cv2.putText(
                     img=_image,
@@ -475,11 +474,11 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
                     fontFace=cv2.FONT_HERSHEY_PLAIN,
                     fontScale=1,
                     color=(0x00, 0x00, 0xFF),
-                    thickness=1
+                    thickness=2
                 )
 
             if _landmark.finger_status.__dict__[k]:
-                if info.debug_mode.circle_on:
+                if info.flags.circle_on:
                     cv2.ellipse(
                         img=_image,
                         center=center,
@@ -491,7 +490,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
                         thickness=2
                     )
 
-                if blur_source_image is not None and _blur_mode == 1 or _blur_mode == 2:
+                if blur_source_image is not None:
                     cv2.ellipse(
                         img=mask_image,
                         center=center,
@@ -504,7 +503,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
                     )
 
             else:
-                if info.debug_mode.circle_on:
+                if info.flags.circle_on:
                     cv2.ellipse(
                         img=_image,
                         center=center,
@@ -515,112 +514,9 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
                         color=(0x00, 0x00, 0xFF),
                         thickness=2
                     )
-    if mask_image is not None and blur_source_image is not None:
+
+    if _blur_mode in ('averaging', 'gaussian', 'median', 'bilateral'):
         _landmarks_sn.image = np.where(mask_image > 0, blur_source_image, _image)
     else:
         _landmarks_sn.image = _image
-
-
-def fingerprint_erase(group_number):
-    interruption_flag = False
-    prev_frame_time = 0
-    curr_frame_time = 0
-
-    with open('./info.json', 'r') as f:
-        info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
-        f.close()
-
-    video_source = info.file_path
-    temp_path = info.folder
-    if not os.path.exists(temp_path):
-        os.mkdir(temp_path)
-    # video_source = 0
-    cap = cv2.VideoCapture(video_source)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, info.frame_jump_unit * group_number)
-    proc_frames = 0
-
-    mp_drawing = mediapipe.solutions.drawing_utils
-    mp_hands = mediapipe.solutions.hands
-
-    try:
-        with mp_hands.Hands(min_detection_confidence=0.6, min_tracking_confidence=0.6) as hands:
-            while proc_frames < info.frame_jump_unit:
-                success, frame = cap.read()
-
-                if not success:
-                    break
-
-                image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-                if isinstance(video_source, int):
-                    image = cv2.flip(image, 1)
-                image.flags.writeable = False
-                results = hands.process(image)
-                image.flags.writeable = True
-                image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-                # Rendering results
-                if results.multi_hand_landmarks:
-                    if info.debug_mode.landmark_on:
-                        for num, hand in enumerate(results.multi_hand_landmarks):
-                            mp_drawing.draw_landmarks(
-                                image, hand, mp_hands.HAND_CONNECTIONS,
-                                mp_drawing.DrawingSpec(color=(121, 22, 76), thickness=2, circle_radius=4),
-                                mp_drawing.DrawingSpec(color=(250, 44, 250), thickness=2, circle_radius=2),
-                            )
-
-                    landmarks_sn = SimpleNamespace(
-                        timestamp=int(round(time.time() * 1000)),
-                    )
-
-                    preprocess(landmarks_sn, results, image, info)
-
-                    detect_orientation(landmarks_sn, info)
-
-                    detect_finger_self_occlusion(landmarks_sn, info)
-
-                    detect_palm_occlusion(landmarks_sn, info)
-
-                else:
-                    landmarks_sn = SimpleNamespace(
-                        timestamp=int(round(time.time() * 1000)),
-                        landmarks_list=[],
-                        image=image
-                    )
-
-                process_fingertip(landmarks_sn, info.blur_mode, info.kernel_size, info)
-
-                if info.debug_mode.frame_rate_on:
-                    curr_frame_time = time.time()
-                    fps = int(1 / (curr_frame_time - prev_frame_time))
-                    prev_frame_time = curr_frame_time
-                    cv2.putText(
-                        img=landmarks_sn.image,
-                        text='{} FPS'.format(fps),
-                        org=(10, 10),
-                        fontFace=cv2.FONT_HERSHEY_PLAIN,
-                        fontScale=1,
-                        color=(0x00, 0xFF, 0x00),
-                        thickness=2
-                    )
-
-                processed_image = landmarks_sn.image
-                cv2.imwrite(
-                    os.path.join(temp_path, '{}{}.jpeg'.format(group_number, landmarks_sn.timestamp)),
-                    processed_image
-                )
-                # cv2.imshow('Hand Tracking', processed_image)
-
-                proc_frames += 1
-
-                if cv2.waitKey(10) & 0xFF == ord('q'):
-                    interruption_flag = True
-                    break
-
-    except:
-        cap.release()
-        cv2.destroyAllWindows()
-
-    cap.release()
-    cv2.destroyAllWindows()
 

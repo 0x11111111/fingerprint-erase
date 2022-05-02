@@ -1,26 +1,43 @@
 import PySimpleGUI as sg
+import cv2
 
 
 def get_option():
     '''
         Get options from user.
     '''
-    file_path = ''
-    # GUI layout
+    camera_count = -1
+    for i in range(5):
+        cap = cv2.VideoCapture(i)
+        if cap.grab():
+            camera_count += 1
+            cap.release()
+        else:
+            cap.release()
+            break
+
     layout = [
         [
-            sg.Text('文件选择'),
+            sg.Text(text='摄像头输入'),
+            sg.Slider(key='camera_input_no', range=(-1, camera_count), default_value=-1, size=(85, 15),
+                      orientation='horizontal')
+        ],
+        [
+            sg.Text(text='文件输入'),
             sg.InputText(key='text_file_path', size=(90, 15)),
             sg.FileBrowse(key='file_path', button_text='浏览'),
-            sg.Submit(key='submit', button_text='提交'),
-            sg.Cancel(key='exit', button_text='退出')
         ],
-        [sg.Text('模糊程度'), sg.Slider(key='blur_value', range=(1, 51), default_value=7, size=(90, 15), orientation='horizontal')],
+        [
+            sg.Text('模糊程度'),
+            sg.Slider(key='blur_value', range=(1, 51), default_value=7, size=(90, 15), orientation='horizontal')
+        ],
         [
             sg.Text('模糊处理'),
-            sg.Radio(key='normalization', text='归一化平滑', group_id='Blur_option', default=True),
-            sg.Radio(key='gaussian', text='高斯平滑', group_id='Blur_option'),
-            sg.Radio(key='nope', text='不处理', group_id='Blur_option')
+            sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', default=True),
+            sg.Radio(key='gaussian', text='高斯模糊', group_id='blur_option'),
+            sg.Radio(key='median', text='中值滤波', group_id='blur_option'),
+            sg.Radio(key='bilateral', text='双边滤波', group_id='blur_option'),
+            sg.Radio(key='nope', text='不处理', group_id='blur_option')
         ],
         [
             sg.Text('编码格式'),
@@ -40,14 +57,18 @@ def get_option():
         ],
         [
             sg.Text('处理加速'),
-            sg.Radio(key='multi_process', text='多进程(长视频)', group_id='multiple', default=True),
-            sg.Radio(key='multi_thread', text='多线程(短视频)', group_id='multiple'),
-            sg.Radio(key='single_process', text='单进程(备选1)', group_id='multiple'),
-            sg.Radio(key='single_thread', text='单线程(备选2)', group_id='multiple'),
+            sg.Radio(key='multi_process', text='多进程', group_id='multiple', default=True),
+            sg.Radio(key='multi_thread', text='多线程', group_id='multiple'),
+            sg.Radio(key='single_process', text='单进程', group_id='multiple'),
+            sg.Radio(key='single_thread', text='单线程', group_id='multiple')
+        ],
+        [
+            sg.Submit(key='submit', button_text='提交'),
+            sg.Cancel(key='exit', button_text='退出')
         ]
     ]
     # WINDOW generation
-    window = sg.Window('请选择视频文件', layout)
+    window = sg.Window('请选择输入流', layout)
 
     # Event loop
     while True:
@@ -55,11 +76,10 @@ def get_option():
         if event == 'exit' or event == sg.WIN_CLOSED:
             break
         elif event == 'submit':
-            if values['text_file_path'] == '':
-                sg.popup('未选择文件')
+            if values['text_file_path'] == '' and values['camera_input_no'] < 0:
+                sg.popup('未选择输入流')
                 event = ''
             else:
-                file_path = values['text_file_path']
                 break
     window.close()
     return values
