@@ -128,8 +128,8 @@ dmypy.json
 config.yaml
 
 # Personal data
-*.csv
 .tmp/
+*.csv
 *.mp4
 *.avi
 *.jpeg
@@ -137,3 +137,4 @@ config.yaml
 *.png
 *.wav
 *.json
+*.old

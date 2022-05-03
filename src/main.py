@@ -10,7 +10,7 @@ import multiprocessing
 from types import SimpleNamespace
 from gui_get_option import get_option
 from delegation_multi_process import multi_process_fingerprint_erase
-from delegation_realtime_process import *
+from delegation_realtime_process import realtime_process
 from utility import sn2dict
 
 
@@ -117,6 +117,37 @@ if __name__ == '__main__':
         info.fps = frame_rate = performance_attributes.frame_rate = int(cap.get(cv2.CAP_PROP_FPS))
         cap.release()
 
+        performance_attributes.threads = info.num_processes = os.cpu_count()
+        if option.single_process or option.single_thread:
+            performance_attributes.threads = info.num_processes = 1
+        info.frame_jump_unit = info.frame_count // info.num_processes
+
+        info_dict = sn2dict(info)
+        with open('./info.json', 'w') as f:
+            json.dump(info_dict, f)
+            f.close()
+
+        performance_attributes.time_erase_start = int(time.time())
+        print('Erase start time: {}'.format(
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_erase_start))))
+        print('Time elapsed: {}s'.format(
+            performance_attributes.time_erase_start - performance_attributes.time_initial_start))
+
+        if option.multi_process or option.single_process:
+            pool = multiprocessing.Pool(info.num_processes)
+            pool.map_async(multi_process_fingerprint_erase, range(info.num_processes))
+            pool.close()
+            pool.join()
+
+        elif option.multi_thread or option.single_thread:
+            pool = threadpool.ThreadPool(info.num_processes)
+            requests = threadpool.makeRequests(multi_process_fingerprint_erase, range(info.num_processes))
+            [pool.putRequest(req) for req in requests]
+            pool.wait()
+
+        source_video = ffmpeg.input(option.file_path)
+        audio = source_video.audio
+
     else:
         # Input from camera stream
         cap = cv2.VideoCapture(info.camera_input_no)
@@ -124,36 +155,23 @@ if __name__ == '__main__':
         info.height = performance_attributes.frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         cap.release()
 
-    performance_attributes.threads = info.num_processes = os.cpu_count()
-    if option.single_process or option.single_thread:
-        performance_attributes.threads = info.num_processes = 1
-    info.frame_jump_unit = info.frame_count // info.num_processes
+        info_dict = sn2dict(info)
+        with open('./info.json', 'w') as f:
+            json.dump(info_dict, f)
+            f.close()
 
-    info_dict = sn2dict(info)
-    with open('./info.json', 'w') as f:
-        json.dump(info_dict, f)
-        f.close()
+        performance_attributes.time_erase_start = int(time.time())
+        print('Erase start time: {}'.format(
+            time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_erase_start))))
+        print('Time elapsed: {}s'.format(
+            performance_attributes.time_erase_start - performance_attributes.time_initial_start))
 
-    performance_attributes.time_erase_start = int(time.time())
-    print('Erase start time: {}'.format(
-        time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_erase_start))))
-    print('Time elapsed: {}s'.format(
-        performance_attributes.time_erase_start - performance_attributes.time_initial_start))
+        temp_path, audio_path, record_time, processed_frame_count = realtime_process()
+        info.frame_count = processed_frame_count
+        info.fps = processed_frame_count / record_time
 
-    if option.multi_process or option.single_process:
-        pool = multiprocessing.Pool(info.num_processes)
-        pool.map_async(multi_process_fingerprint_erase, range(info.num_processes))
-        pool.close()
-        pool.join()
+        audio = ffmpeg.input(audio_path).audio
 
-    elif option.multi_thread or option.single_thread:
-        pool = threadpool.ThreadPool(info.num_processes)
-        requests = threadpool.makeRequests(multi_process_fingerprint_erase, range(info.num_processes))
-        [pool.putRequest(req) for req in requests]
-        pool.wait()
-
-    source_video = ffmpeg.input(option.file_path)
-    audio = source_video.audio
 
     performance_attributes.time_concat_start = int(time.time())
     print('Concatenate start time: {}'.format(
@@ -162,12 +180,13 @@ if __name__ == '__main__':
         performance_attributes.time_concat_start - performance_attributes.time_initial_start))
 
     frame_path = os.path.abspath(info.folder)
-    dst_path = '.'
+    dst_path = '../output'
     if not os.path.exists(dst_path):
         os.mkdir(dst_path)
     output_file_path = os.path.abspath(os.path.join(dst_path, 'erased' + video_extension))
     output_video = None
     if platform.system() == 'Windows':
+        # Windows doesn't support POSIX like wildcard.
         file_list = os.listdir(frame_path)
         for i, name in enumerate(file_list):
             src = os.path.join(frame_path, name)
@@ -177,9 +196,10 @@ if __name__ == '__main__':
         output_video = (
             ffmpeg
             .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=info.fps)
-
         )
+
     else:
+        # Unix-like is GREAT.
         output_video = (
             ffmpeg
             .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob', framerate=info.fps)
@@ -189,7 +209,7 @@ if __name__ == '__main__':
         ffmpeg
         .concat(output_video, audio, v=1, a=1)
         .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
-        .global_args('-loglevel', 'quiet')
+        # .global_args('-loglevel', 'quiet')
     )
 
     performance_attributes.time_output_start = int(time.time())
@@ -212,9 +232,11 @@ if __name__ == '__main__':
         performance_attributes.time_finish - performance_attributes.time_output_start))
     print('Total: {}s'.format(performance_attributes.time_finish - performance_attributes.time_initial_start))
     print('Process information:')
-    print('- Threads/Cores utilized: {}'.format(performance_attributes.threads))
+    if info.camera_input_no < 0:
+        print('- Threads/Cores utilized: {}'.format(performance_attributes.threads))
     print('- Frames processed: {}'.format(performance_attributes.frame_count))
     print('- Frames size: {} x {}'.format(performance_attributes.frame_width, performance_attributes.frame_height))
     print('- Video frame rate: {}FPS'.format(performance_attributes.frame_rate))
-    print('- Average frame processing rate: {:.3f}FPS'.format(performance_attributes.frame_count / (
-            performance_attributes.time_concat_start - performance_attributes.time_erase_start)))
+    if info.camera_input_no < 0:
+        print('- Average frame processing rate: {:.3f}FPS'.format(performance_attributes.frame_count / (
+                performance_attributes.time_concat_start - performance_attributes.time_erase_start)))
