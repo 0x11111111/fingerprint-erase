@@ -313,7 +313,7 @@ def detect_orientation(_landmarks_sn, info):
             cv2.putText(
                 img=_landmarks_sn.image,
                 text=_text,
-            org=coord2,
+                org=coord2,
                 fontFace=cv2.FONT_HERSHEY_PLAIN,
                 fontScale=1,
                 color=(0x00, 0x00, 0xFF),

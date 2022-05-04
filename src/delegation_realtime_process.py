@@ -12,7 +12,6 @@ import PySimpleGUI as sg
 from multiprocessing import Process, Event, Manager
 from types import SimpleNamespace
 
-
 from core_finger_processor import preprocess, detect_orientation, detect_finger_self_occlusion, detect_palm_occlusion, \
     process_fingertip
 
@@ -63,10 +62,8 @@ def realtime_process():
     erase.join()
     recorder.join()
 
-    # print(return_dict)
     time_list = []
     erase_start = return_dict['fingerprint_erase_start_timestamp']
-    duration = (return_dict['fingerprint_erase_end_timestamp'] - erase_start) / 1000.0
     offset_time = erase_start - return_dict['sound_recorder_start_timestamp']
     source_audio_path = return_dict['record_path']
     output_audio_path = os.path.abspath(os.path.join(info.folder, 'concatenated.wav'))
@@ -109,7 +106,7 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
         [sg.Image(filename='', key='image')],
         [
             sg.Button(key='Erase', button_text='抹除', size=(10, 1), font='Any 15'),
-            sg.Button(key='Stop', button_text='停止', size=(10, 1), font='Any 15'),
+            # sg.Button(key='Stop', button_text='停止', size=(10, 1), font='Any 15'),
             sg.Button(key='Exit', button_text='退出', size=(10, 1), font='Any 15')
         ],
         [
@@ -158,19 +155,20 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
 
                     break
 
-                elif event == 'Stop':
-                    if erase_flag:
-                        end_timestamp = int(time.time() * 1000)
-                        timestamp_list.append((start_timestamp, end_timestamp))
-                        erase_flag = False
-
                 elif event == 'Erase':
                     if not erase_flag:
                         start_timestamp = int(time.time() * 1000)
                         erase_flag = True
+                        window['Erase'].update(text='停止')
+
+                    else:
+                        end_timestamp = int(time.time() * 1000)
+                        timestamp_list.append((start_timestamp, end_timestamp))
+                        erase_flag = False
+                        window['Erase'].update(text='抹除')
 
                 if erase_flag:
-                    ret, frame = cap.read()
+                    _, frame = cap.read()
                     if option.flip:
                         frame = cv2.flip(frame, 1)
 
@@ -253,7 +251,7 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
                     window['image'].update(data=image_bytes)
 
                 else:
-                    ret, frame = cap.read()
+                    _, frame = cap.read()
                     if option.flip:
                         frame = cv2.flip(frame, 1)
                     image_bytes = cv2.imencode('.png', frame)[1].tobytes()
@@ -286,7 +284,6 @@ def sound_recorder(finished_event, ret_dict, info):
 
     chunk = int(sample_rate / 2)
     sample_format = pyaudio.paInt16  # 16 bits per sample
-    channels = 2
     temp_path = info.folder
     filename = os.path.abspath(os.path.join(temp_path, "output.wav"))
 
