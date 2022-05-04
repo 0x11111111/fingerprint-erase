@@ -1,16 +1,16 @@
+import json
 import os
 import time
-import json
-import cv2
-import mediapipe
-import pyaudio
 import wave
-import ffmpeg
-import sounddevice as sd
-import PySimpleGUI as sg
-
 from multiprocessing import Process, Event, Manager
 from types import SimpleNamespace
+
+import PySimpleGUI as sg
+import cv2
+import ffmpeg
+import mediapipe
+import pyaudio
+import sounddevice as sd
 
 from core_finger_processor import preprocess, detect_orientation, detect_finger_self_occlusion, detect_palm_occlusion, \
     process_fingertip
@@ -92,7 +92,6 @@ def realtime_process():
 
 
 def fingerprint_erase(video_source, finished_event, ret_dict, info):
-
     temp_path = info.folder
     if not os.path.exists(temp_path):
         os.mkdir(temp_path)
@@ -120,14 +119,17 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
         ],
         [
             sg.Text('模糊程度', font='Any 15'),
-            sg.Slider(key='blur_value', range=(1, 51), default_value=info.kernel_size, size=(90, 15), orientation='horizontal')
+            sg.Slider(key='blur_value', range=(1, 51), default_value=info.kernel_size, size=(90, 15),
+                      orientation='horizontal')
         ],
         [
             sg.Text('模糊处理', font='Any 15'),
-            sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', default=info.option.averaging, font='Any 15'),
+            sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', default=info.option.averaging,
+                     font='Any 15'),
             sg.Radio(key='gaussian', text='高斯模糊', group_id='blur_option', default=info.option.gaussian, font='Any 15'),
             sg.Radio(key='median', text='中值滤波', group_id='blur_option', default=info.option.median, font='Any 15'),
-            sg.Radio(key='bilateral', text='双边滤波', group_id='blur_option', default=info.option.bilateral, font='Any 15'),
+            sg.Radio(key='bilateral', text='双边滤波', group_id='blur_option', default=info.option.bilateral,
+                     font='Any 15'),
             sg.Radio(key='nope', text='不处理', group_id='blur_option', default=info.option.nope, font='Any 15')
         ]
     ]
@@ -271,7 +273,6 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
 
 
 def sound_recorder(finished_event, ret_dict, info):
-
     device_no = 0
     sample_rate = 0
     channels = 2

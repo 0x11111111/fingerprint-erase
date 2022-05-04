@@ -1,10 +1,11 @@
+import json
 import os
 import time
-import json
+from types import SimpleNamespace
+
 import cv2
 import mediapipe
 
-from types import SimpleNamespace
 from core_finger_processor import preprocess, detect_orientation, detect_finger_self_occlusion, detect_palm_occlusion, \
     process_fingertip
 

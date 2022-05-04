@@ -1,19 +1,19 @@
-import os
-import time
-import cv2
-import threadpool
 import json
-import ffmpeg
+import multiprocessing
+import os
 import platform
 import sys
-import multiprocessing
-
+import time
 from types import SimpleNamespace
-from gui_get_option import get_option
+
+import cv2
+import ffmpeg
+import threadpool
+
 from delegation_multi_process import multi_process_fingerprint_erase
 from delegation_realtime_process import realtime_process
+from gui_get_option import get_option
 from utility import sn2dict
-
 
 if __name__ == '__main__':
     info = SimpleNamespace()
@@ -202,20 +202,21 @@ if __name__ == '__main__':
 
         output_video = (
             ffmpeg
-            .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=performance_attributes.frame_rate)
+                .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=performance_attributes.frame_rate)
         )
 
     else:
         # Unix-like is GREAT.
         output_video = (
             ffmpeg
-            .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob', framerate=performance_attributes.frame_rate)
+                .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob',
+                       framerate=performance_attributes.frame_rate)
         )
 
     output_video = (
         ffmpeg
-        .concat(output_video, audio, v=1, a=1)
-        .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
+            .concat(output_video, audio, v=1, a=1)
+            .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
         # .global_args('-loglevel', 'quiet')
     )
 
@@ -247,7 +248,7 @@ if __name__ == '__main__':
         print('- Frames size: {} x {}'.format(performance_attributes.frame_width, performance_attributes.frame_height))
         print('- Video frame rate: {:.3f}FPS'.format(performance_attributes.frame_rate))
         print('- Average frame processing rate: {:.3f}FPS'.format(performance_attributes.frame_count / (
-            performance_attributes.time_concat_start - performance_attributes.time_erase_start)))
+                performance_attributes.time_concat_start - performance_attributes.time_erase_start)))
 
     else:
         print('ALL ACCOMPLISHED')
@@ -264,4 +265,4 @@ if __name__ == '__main__':
         print('- Frames processed: {}'.format(performance_attributes.frame_count))
         print('- Frames size: {} x {}'.format(performance_attributes.frame_width, performance_attributes.frame_height))
         print('- Average frame processing rate: {:.3f}FPS'.format(performance_attributes.frame_count / (
-            performance_attributes.time_concat_start - performance_attributes.time_erase_start)))
+                performance_attributes.time_concat_start - performance_attributes.time_erase_start)))

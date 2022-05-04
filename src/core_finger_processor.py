@@ -1,8 +1,9 @@
+from types import SimpleNamespace
+
 import cv2
 import mediapipe
 import numpy as np
 
-from types import SimpleNamespace
 from utility import calculate_distance_sn, calculate_distance_array, intersect_line_circle
 
 

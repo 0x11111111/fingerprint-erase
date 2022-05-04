@@ -1,5 +1,5 @@
-import cv2
 import PySimpleGUI as sg
+import cv2
 
 
 def get_option():
