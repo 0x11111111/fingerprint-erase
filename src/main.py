@@ -180,7 +180,7 @@ if __name__ == '__main__':
             performance_attributes.time_concat_start - performance_attributes.time_initial_start))
 
     frame_path = os.path.abspath(info.folder)
-    dst_path = './output'
+    dst_path = '../output'
     if not os.path.exists(dst_path):
         os.mkdir(dst_path)
     output_file_path = os.path.abspath(os.path.join(dst_path, 'erased' + video_extension))
@@ -202,22 +202,21 @@ if __name__ == '__main__':
 
         output_video = (
             ffmpeg
-                .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=performance_attributes.frame_rate)
+            .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=performance_attributes.frame_rate)
         )
 
     else:
         # Unix-like is GREAT.
         output_video = (
             ffmpeg
-                .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob',
-                       framerate=performance_attributes.frame_rate)
+            .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob', framerate=performance_attributes.frame_rate)
         )
 
     output_video = (
         ffmpeg
-            .concat(output_video, audio, v=1, a=1)
-            .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
-        # .global_args('-loglevel', 'quiet')
+        .concat(output_video, audio, v=1, a=1)
+        .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
+        .global_args('-loglevel', 'quiet')
     )
 
     performance_attributes.time_output_start = int(time.time())

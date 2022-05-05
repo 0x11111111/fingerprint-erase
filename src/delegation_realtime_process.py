@@ -45,7 +45,8 @@ def realtime_process():
                 bilateral=False,
                 nope=False
             ),
-            blur_mode='averaging'
+            blur_mode='averaging',
+            camera_input_no=0
         )
         info.EPS = 0.0001
         info.tip_dip_length_ratio = 0.7
@@ -54,7 +55,7 @@ def realtime_process():
         info.finger_mcp_width_ratio = 0.65
         info.landmark_order = 'abcdefghijklmnopqrstu'
 
-    erase = Process(target=fingerprint_erase, args=(0, finished, return_dict, info))
+    erase = Process(target=fingerprint_erase, args=(int(info.camera_input_no), finished, return_dict, info))
     recorder = Process(target=sound_recorder, args=(finished, return_dict, info))
     recorder.start()
     erase.start()
