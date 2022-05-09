@@ -1,3 +1,4 @@
+import types
 from types import SimpleNamespace
 
 import cv2
@@ -7,7 +8,20 @@ import numpy as np
 from utility import calculate_distance_sn, calculate_distance_array, intersect_line_circle
 
 
-def preprocess(_landmarks_sn, res, _image, info):
+def preprocess(_landmarks_sn, res, _image, info) -> None:
+    """Preprocess landmarks captured by MediaPipe Hands.
+
+    Extract each landmark from recognition results. Calculate the width of MCP, parameters of fingerprint ellipse、
+    All data are parsed into types.SimpleNamespace containers _landmarks_sn, including captured _image.
+
+    Args:
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        res (mediapipe.python.solutions.hands.Hands): recognition results of MediaPipe hands
+        _image (numpy.ndarray): image captured by cv2.VideoCapture()
+        info (types.SimpleNamespace)): consts and attributes from main
+   Returns:
+        None
+    """
     height, width, _ = _image.shape
     _landmarks_sn.landmarks_list = []
     _yy, _dy = 10, 15
@@ -263,7 +277,19 @@ def preprocess(_landmarks_sn, res, _image, info):
     _landmarks_sn.image = _image
 
 
-def detect_orientation(_landmarks_sn, info):
+def detect_orientation(_landmarks_sn, info) -> None:
+    """Detect palm's orientation.
+
+    As name indicates, detect orientation. If the back of one palm is captured by camera, the fingers of it no longer
+    need to be erased.
+
+    Args:
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        info (types.SimpleNamespace)): consts and attributes from main
+
+    Returns:
+        None
+    """
     for _landmarks in _landmarks_sn.landmarks_list:
 
         wrist = np.array([_landmarks.wrist.x, _landmarks.wrist.y])
@@ -322,7 +348,18 @@ def detect_orientation(_landmarks_sn, info):
             )
 
 
-def detect_finger_self_occlusion(_landmarks_sn, info):
+def detect_finger_self_occlusion(_landmarks_sn: types.SimpleNamespace, info: types.SimpleNamespace) -> None:
+    """Detect if fingers are bent.
+
+    Bent fingers are self-occluded by themselves. No need to be erased.
+
+    Args:
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        info (types.SimpleNamespace)): consts and attributes from main. Useless here in this function
+
+    Returns:
+        None
+    """
     for _landmarks in _landmarks_sn.landmarks_list:
         if _landmarks.orientation == 'Front':
             wrist_tip_distance = {
@@ -345,7 +382,18 @@ def detect_finger_self_occlusion(_landmarks_sn, info):
                     _landmarks.finger_status.__dict__[k] = False
 
 
-def detect_palm_occlusion(_landmarks_sn, info):
+def detect_palm_occlusion(_landmarks_sn: types.SimpleNamespace, info: types.SimpleNamespace) -> None:
+    """Detect if fingers are occluded by another palm.
+
+    Calculate positional relationship between fingers of the distant hand and the close palm.
+
+    Args:
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        info (types.SimpleNamespace)): consts and attributes from main
+
+    Returns:
+
+    """
     # hand occlusion detection
     height, width, _ = _landmarks_sn.image.shape
     ls = _landmarks_sn.landmarks_list
@@ -444,6 +492,19 @@ def detect_palm_occlusion(_landmarks_sn, info):
 
 
 def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
+    """Core function to blur fingerprint kernel ellipses.
+
+    Use blur functions of OpenCV to blur fingerprints.
+
+    Args:
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        _blur_mode (str): algorithm selected to blur fingerprints
+        _kernel_size (int): indicates the blur level of fingerprints
+        info (types.SimpleNamespace)): consts and attributes from main
+
+    Returns:
+
+    """
     _image = _landmarks_sn.image
     image_height, image_width, _ = _image.shape
     mask_image = np.zeros(_image.shape, _image.dtype)
