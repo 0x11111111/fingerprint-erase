@@ -1,6 +1,7 @@
 import json
 import os
 import time
+import types
 import wave
 from multiprocessing import Process, Event, Manager
 from types import SimpleNamespace
@@ -16,7 +17,15 @@ from core_finger_processor import preprocess, detect_orientation, detect_finger_
     process_fingertip
 
 
-def realtime_process():
+def realtime_process() -> ():
+    """Delegation for realtime camera captured video stream process.
+
+    Executes two subprocess handling video and audio recording respectively. Video is captured via camera indicated
+    by info.json.
+
+    Returns:
+        tuple: tuple of temporary folder path, output audio path, record time and frame count
+    """
     finished = Event()
     return_dict = Manager().dict()
 
@@ -86,13 +95,29 @@ def realtime_process():
             audio = ffmpeg.concat(audio, to_concat, v=0, a=1)
 
         audio.output(output_audio_path).run(overwrite_output=True)
+
         return info.folder, output_audio_path, record_time, return_dict['frame_count']
 
     else:
         return None
 
 
-def fingerprint_erase(video_source, finished_event, ret_dict, info):
+def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, info: types.SimpleNamespace):
+    """Handling camera input stream and fingerprint erasure.
+
+    This function is called by realtime_process. Video input stream is indicated by video_source. Interprocess
+    communication is indicated by finished_event.
+
+    Args:
+        video_source (int): indicates which camera is activated
+        finished_event (Event): sets the event if the stop is called in video recording and stops sound recording in
+            sound_recorder()
+        ret_dict (dict): video records timestamp and frame count
+        info (types.SimpleNamespace): consts and attributes from main
+
+    Returns:
+
+    """
     temp_path = info.folder
     if not os.path.exists(temp_path):
         os.mkdir(temp_path)
@@ -263,9 +288,13 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
         cap.release()
         cv2.destroyAllWindows()
 
-    except:
+    except KeyboardInterrupt:
+        print('KeyboardInterrupt triggered by user in realtime process procedure.')
+
+    finally:
         cap.release()
         cv2.destroyAllWindows()
+
     ret_dict['fingerprint_erase_end_timestamp'] = int(time.time() * 1000)
     window.close()
     finished_event.set()
@@ -273,7 +302,18 @@ def fingerprint_erase(video_source, finished_event, ret_dict, info):
     ret_dict['frame_count'] = processed_frame_count
 
 
-def sound_recorder(finished_event, ret_dict, info):
+def sound_recorder(finished_event: Event, ret_dict: dict, info: types.SimpleNamespace) -> None:
+    """Handling sound recording from microphone.
+
+    Microphone is automatically selected by traversing available audio input sources.
+    Args:
+        finished_event (Event): tests the event if the stop is called in video recording and stops sound recording
+        ret_dict (dict): audio record start timestamp and path to audio file
+        info (types.SimpleNamespace): consts and attributes from main
+
+    Returns:
+
+    """
     device_no = 0
     sample_rate = 0
     channels = 2

@@ -10,7 +10,17 @@ from core_finger_processor import preprocess, detect_orientation, detect_finger_
     process_fingertip
 
 
-def multi_process_fingerprint_erase(group_number):
+def multi_process(group_number: int) -> None:
+    """Delegation for multiple core video process.
+
+    Call functions from core_finger_processor
+
+    Args:
+        group_number (int): indicates the number of the process or thread. Appears in the name of temporary images.
+
+    Returns:
+        None
+    """
     prev_frame_time = 0
     curr_frame_time = 0
 
@@ -102,9 +112,9 @@ def multi_process_fingerprint_erase(group_number):
                     interruption_flag = True
                     break
 
-    except:
+    except KeyboardInterrupt:
+        print('Interruption triggered by user in video process procedure.')
+
+    finally:
         cap.release()
         cv2.destroyAllWindows()
-
-    cap.release()
-    cv2.destroyAllWindows()

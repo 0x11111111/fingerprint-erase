@@ -10,7 +10,7 @@ import cv2
 import ffmpeg
 import threadpool
 
-from delegation_multi_process import multi_process_fingerprint_erase
+from delegation_multi_process import multi_process
 from delegation_realtime_process import realtime_process
 from gui_get_option import get_option
 from utility import sn2dict
@@ -43,7 +43,7 @@ if __name__ == '__main__':
         # 核心指纹圈
         circle_on=False,
         # 关键点连线
-        connection_on=False,
+        connection_on=True,
         # 坐标显示
         coordination_on=False,
         # 指纹核心参数
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         # 帧率
         frame_rate_on=False,
         # 手掌包络框
-        box_on=False,
+        box_on=True,
     )
 
     info.EPS = 0.0001
@@ -142,13 +142,13 @@ if __name__ == '__main__':
 
         if option.multi_process or option.single_process:
             pool = multiprocessing.Pool(info.num_processes)
-            pool.map_async(multi_process_fingerprint_erase, range(info.num_processes))
+            pool.map_async(multi_process, range(info.num_processes))
             pool.close()
             pool.join()
 
         elif option.multi_thread or option.single_thread:
             pool = threadpool.ThreadPool(info.num_processes)
-            requests = threadpool.makeRequests(multi_process_fingerprint_erase, range(info.num_processes))
+            requests = threadpool.makeRequests(multi_process, range(info.num_processes))
             [pool.putRequest(req) for req in requests]
             pool.wait()
 

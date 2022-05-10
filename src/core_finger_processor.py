@@ -18,7 +18,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
         _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
         res (mediapipe.python.solutions.hands.Hands): recognition results of MediaPipe hands
         _image (numpy.ndarray): image captured by cv2.VideoCapture()
-        info (types.SimpleNamespace)): consts and attributes from main
+        info (types.SimpleNamespace): consts and attributes from main
    Returns:
         None
     """
@@ -28,6 +28,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
     for idx, hand_landmarks in enumerate(res.multi_hand_landmarks):
         _landmarks = SimpleNamespace(
             no=idx,
+            # Handedness: 'Left' 'Right'
             handedness=res.multi_handedness[idx].classification[0].label,
             wrist=SimpleNamespace(
                 x=hand_landmarks.landmark[0].x * width,
@@ -152,6 +153,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
                 ),
             ),
 
+            # Fingerprint erasure is disabled if the status of one fingerprint is False
             finger_status=SimpleNamespace(
                 thumb=True,
                 index=True,
@@ -161,6 +163,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
             )
         )
 
+        # Translating hand landmarks from numerical order 0-20 to alphabetic order a-u.
         _landmarks.landmark = SimpleNamespace(
             a=_landmarks.wrist,
 
@@ -197,6 +200,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
             z=_landmarks.fingers.thumb.ip.z
         )
 
+        # Calculate each width of adjacent MCP joints.
         _landmarks.mcp_width = SimpleNamespace(
             index_middle=calculate_distance_sn(_landmarks.fingers.index.mcp,
                                                _landmarks.fingers.middle.mcp),
@@ -204,9 +208,11 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
             ring_pinky=calculate_distance_sn(_landmarks.fingers.ring.mcp, _landmarks.fingers.pinky.mcp)
         )
 
+        # The sum is adopted by the judgement of distance of palms
         _landmarks.mcp_width_sum = _landmarks.mcp_width.index_middle + \
             _landmarks.mcp_width.middle_ring + _landmarks.mcp_width.ring_pinky
 
+        # Short axe of fingerprint kernel ellipse
         _landmarks.fingertip_minor_axe = SimpleNamespace(
             thumb=calculate_distance_sn(
                 _landmarks.fingers.thumb.mcp,
@@ -239,6 +245,10 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
         ring_tip_dip_distance = calculate_distance_array(ring_tip, ring_dip)
         pinky_tip_dip_distance = calculate_distance_array(pinky_tip, pinky_dip)
 
+        '''
+         Major axe of fingerprint kernel ellipse, value range generated between minor axe and distance between finger
+            TIP and IP joint
+        '''
         _landmarks.fingertip_major_axe = SimpleNamespace(
             thumb=(_landmarks.fingertip_minor_axe.thumb + thumb_tip_ip_distance) * 0.5,
             index=(_landmarks.fingertip_minor_axe.index + index_tip_dip_distance) * 0.5,
@@ -247,6 +257,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
             pinky=(_landmarks.fingertip_minor_axe.pinky + pinky_tip_dip_distance) * 0.5
         )
 
+        # Rotation angle of fingerprint kernel ellipse
         _landmarks.fingertip_angle = SimpleNamespace(
             thumb=np.rad2deg(np.arctan2(thumb_tip[1] - thumb_ip[1], thumb_tip[0] - thumb_ip[0])),
             index=np.rad2deg(np.arctan2(index_tip[1] - index_dip[1], index_tip[0] - index_dip[0])),
@@ -255,6 +266,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
             pinky=np.rad2deg(np.arctan2(pinky_tip[1] - pinky_dip[1], pinky_tip[0] - pinky_dip[0]))
         )
 
+        # Record the landmarks and fingerprint kernel ellipse attributes in _landmarks_sn.
         _landmarks_sn.landmarks_list.append(_landmarks)
 
         if info.flags.coordination_on:
@@ -284,7 +296,7 @@ def detect_orientation(_landmarks_sn, info) -> None:
     need to be erased.
 
     Args:
-        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra information
         info (types.SimpleNamespace)): consts and attributes from main
 
     Returns:

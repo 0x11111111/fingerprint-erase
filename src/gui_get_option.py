@@ -2,9 +2,12 @@ import PySimpleGUI as sg
 import cv2
 
 
-def get_option():
-    """
-        Get options from user.
+def get_option() -> dict:
+    """Get options from user.
+
+    The GUI to interact with user to get options.
+    Returns:
+        dict: a dict containing user's selections
     """
     camera_count = -1
     for i in range(5):
