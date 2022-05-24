@@ -3,8 +3,9 @@ import os
 import time
 from types import SimpleNamespace
 
-import cv2
 import mediapipe
+import numpy as np
+from cv2 import cv2
 
 from core_finger_processor import preprocess, detect_orientation, detect_finger_self_occlusion, detect_palm_occlusion, \
     process_fingertip
@@ -27,6 +28,7 @@ def multi_process(group_number: int) -> None:
     with open('./info.json', 'r') as f:
         info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
         f.close()
+    info.normalized_kernel = np.array(info.normalized_kernel)
 
     video_source = info.file_path
     temp_path = info.folder
@@ -83,7 +85,7 @@ def multi_process(group_number: int) -> None:
                         image=image
                     )
 
-                process_fingertip(landmarks_sn, info.blur_mode, info.kernel_size, info)
+                process_fingertip(landmarks_sn, info.blur_mode, info.kernel_size, info.normalized_kernel, info)
 
                 if info.flags.frame_rate_on:
                     curr_frame_time = time.time()
@@ -109,7 +111,6 @@ def multi_process(group_number: int) -> None:
                 processed_frame_count += 1
 
                 if cv2.waitKey(10) & 0xFF == ord('q'):
-                    interruption_flag = True
                     break
 
     except KeyboardInterrupt:

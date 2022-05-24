@@ -1,9 +1,9 @@
 import types
 from types import SimpleNamespace
 
-import cv2
 import mediapipe
 import numpy as np
+from cv2 import cv2
 
 from utility import calculate_distance_sn, calculate_distance_array, intersect_line_circle
 
@@ -210,7 +210,7 @@ def preprocess(_landmarks_sn, res, _image, info) -> None:
 
         # The sum is adopted by the judgement of distance of palms
         _landmarks.mcp_width_sum = _landmarks.mcp_width.index_middle + \
-            _landmarks.mcp_width.middle_ring + _landmarks.mcp_width.ring_pinky
+                                   _landmarks.mcp_width.middle_ring + _landmarks.mcp_width.ring_pinky
 
         # Short axe of fingerprint kernel ellipse
         _landmarks.fingertip_minor_axe = SimpleNamespace(
@@ -400,13 +400,14 @@ def detect_palm_occlusion(_landmarks_sn: types.SimpleNamespace, info: types.Simp
     Calculate positional relationship between fingers of the distant hand and the close palm.
 
     Args:
-        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
+        _landmarks_sn (types.SimpleNamespace): container for landmarks and extra information
         info (types.SimpleNamespace)): consts and attributes from main
 
     Returns:
+        None
 
     """
-    # hand occlusion detection
+    # Hand occlusion detection
     height, width, _ = _landmarks_sn.image.shape
     ls = _landmarks_sn.landmarks_list
     mp_hands = mediapipe.solutions.hands
@@ -492,18 +493,18 @@ def detect_palm_occlusion(_landmarks_sn: types.SimpleNamespace, info: types.Simp
                     y1 = int(close.landmark.__dict__[info.landmark_order[first]].y)
                     x2 = int(close.landmark.__dict__[info.landmark_order[second]].x)
                     y2 = int(close.landmark.__dict__[info.landmark_order[second]].y)
-                    intersect_res = None
+                    # intersect_res = None
                     if not (-info.EPS <= x1 - x2 <= info.EPS and -info.EPS <= y1 - y2 <= info.EPS):
                         intersect_res = intersect_line_circle((xi, yi), ri, (x1, y1), (x2, y2))
                     else:
                         # Two points overlapping as one cannot discriminate one line.
-                        return (xi - x1) ** 2 + (yi - y1) ** 2 <= ri ** 2
+                        intersect_res = []
 
                     if intersect_res:
                         distant.finger_status.__dict__[ki] = False
 
 
-def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
+def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, _kernel, info):
     """Core function to blur fingerprint kernel ellipses.
 
     Use blur functions of OpenCV to blur fingerprints.
@@ -512,16 +513,21 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
         _landmarks_sn (types.SimpleNamespace): container for landmarks and extra info
         _blur_mode (str): algorithm selected to blur fingerprints
         _kernel_size (int): indicates the blur level of fingerprints
+        _kernel (numpy.ndarray): kernel filter used in random filtering. This argument maybe None if other algorithm
+            is used.
         info (types.SimpleNamespace)): consts and attributes from main
 
     Returns:
+        None
 
     """
     _image = _landmarks_sn.image
     image_height, image_width, _ = _image.shape
     mask_image = np.zeros(_image.shape, _image.dtype)
 
-    if _blur_mode == 'averaging':
+    if _blur_mode == 'random':
+        blur_source_image = cv2.filter2D(_image, -1, _kernel)
+    elif _blur_mode == 'averaging':
         blur_source_image = cv2.blur(_image, (_kernel_size, _kernel_size))
     elif _blur_mode == 'gaussian':
         blur_source_image = cv2.GaussianBlur(_image, (_kernel_size, _kernel_size), 0)
@@ -589,8 +595,7 @@ def process_fingertip(_landmarks_sn, _blur_mode, _kernel_size, info):
                         thickness=2
                     )
 
-    if _blur_mode in ('averaging', 'gaussian', 'median', 'bilateral'):
+    if _blur_mode in ('random', 'averaging', 'gaussian', 'median', 'bilateral'):
         _landmarks_sn.image = np.where(mask_image > 0, blur_source_image, _image)
     else:
         _landmarks_sn.image = _image
-

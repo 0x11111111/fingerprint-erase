@@ -6,9 +6,10 @@ import sys
 import time
 from types import SimpleNamespace
 
-import cv2
 import ffmpeg
+import numpy as np
 import threadpool
+from cv2 import cv2
 
 from delegation_multi_process import multi_process
 from delegation_realtime_process import realtime_process
@@ -41,7 +42,7 @@ if __name__ == '__main__':
 
     info.flags = SimpleNamespace(
         # 核心指纹圈
-        circle_on=False,
+        circle_on=True,
         # 关键点连线
         connection_on=True,
         # 坐标显示
@@ -53,7 +54,7 @@ if __name__ == '__main__':
         # 帧率
         frame_rate_on=False,
         # 手掌包络框
-        box_on=True,
+        box_on=False,
     )
 
     info.EPS = 0.0001
@@ -71,12 +72,21 @@ if __name__ == '__main__':
             time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(performance_attributes.time_initial_start))))
 
     info.file_path = option.file_path
-    # Kernel size of Gaussian should be odd only
-    info.kernel_size = int(option.blur_value // 2 * 2 + 1)
+    # info.kernel_size = int(option.blur_value // 2 * 2 + 1)
     info.camera_input_no = int(option.camera_input_no)
 
+    info.normalized_kernel = None
+    kernel_size = info.kernel_size = int(option.blur_value)
     info.blur_mode = 'nope'
-    if option.averaging:
+    if option.random:
+        info.blur_mode = 'random'
+        # Generate filter kernel for random blurring.
+        kernel = np.random.randint(1, kernel_size ** 4 + 1, size=[kernel_size] * 2)
+        sum_kernel = np.sum(kernel)
+        normalized_kernel = kernel / sum_kernel
+        info.normalized_kernel = normalized_kernel.tolist()
+
+    elif option.averaging:
         info.blur_mode = 'averaging'
     elif option.gaussian:
         info.blur_mode = 'gaussian'
@@ -202,21 +212,22 @@ if __name__ == '__main__':
 
         output_video = (
             ffmpeg
-            .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=performance_attributes.frame_rate)
+                .input(os.path.join(frame_path, 'image%08d.jpeg'), framerate=performance_attributes.frame_rate)
         )
 
     else:
         # Unix-like is GREAT.
         output_video = (
             ffmpeg
-            .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob', framerate=performance_attributes.frame_rate)
+                .input(os.path.join(frame_path, '*.jpeg'), pattern_type='glob',
+                       framerate=performance_attributes.frame_rate)
         )
 
     output_video = (
         ffmpeg
-        .concat(output_video, audio, v=1, a=1)
-        .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
-        .global_args('-loglevel', 'quiet')
+            .concat(output_video, audio, v=1, a=1)
+            .output(output_file_path, vcodec=codec, threads=os.cpu_count(), preset=preset)
+            .global_args('-loglevel', 'quiet')
     )
 
     performance_attributes.time_output_start = int(time.time())

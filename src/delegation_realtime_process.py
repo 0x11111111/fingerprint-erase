@@ -7,11 +7,12 @@ from multiprocessing import Process, Event, Manager
 from types import SimpleNamespace
 
 import PySimpleGUI as sg
-import cv2
 import ffmpeg
 import mediapipe
+import numpy as np
 import pyaudio
 import sounddevice as sd
+from cv2 import cv2
 
 from core_finger_processor import preprocess, detect_orientation, detect_finger_self_occlusion, detect_palm_occlusion, \
     process_fingertip
@@ -30,10 +31,12 @@ def realtime_process() -> ():
     return_dict = Manager().dict()
 
     info = None
-    if os.path.exists('./info.json'):
+    if not __name__ == '__main__' and os.path.exists('./info.json'):
         with open('./info.json', 'r') as f:
             info = json.load(f, object_hook=lambda x: SimpleNamespace(**x))
             f.close()
+        info.normalized_kernel = np.array(info.normalized_kernel)
+
     else:
         info = SimpleNamespace(
             folder=os.path.join('../.tmp', '{}'.format(int(time.time() * 1000))),
@@ -46,9 +49,10 @@ def realtime_process() -> ():
                 frame_rate_on=False,
                 box_on=False,
             ),
-            kernel_size=7,
+            kernel_size=11,
             option=SimpleNamespace(
-                averaging=True,
+                random=True,
+                averaging=False,
                 gaussian=False,
                 median=False,
                 bilateral=False,
@@ -57,6 +61,7 @@ def realtime_process() -> ():
             blur_mode='averaging',
             camera_input_no=0
         )
+
         info.EPS = 0.0001
         info.tip_dip_length_ratio = 0.7
         info.pinky_ring_width_ratio = 0.89
@@ -99,7 +104,7 @@ def realtime_process() -> ():
         return info.folder, output_audio_path, record_time, return_dict['frame_count']
 
     else:
-        return None
+        return tuple()
 
 
 def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, info: types.SimpleNamespace):
@@ -131,7 +136,6 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
         [sg.Image(filename='', key='image')],
         [
             sg.Button(key='Erase', button_text='抹除', size=(10, 1), font='Any 15'),
-            # sg.Button(key='Stop', button_text='停止', size=(10, 1), font='Any 15'),
             sg.Button(key='Exit', button_text='退出', size=(10, 1), font='Any 15')
         ],
         [
@@ -150,6 +154,7 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
         ],
         [
             sg.Text('模糊处理', font='Any 15'),
+            sg.Radio(key='random', text='随机模糊', group_id='blur_option', default=info.option.random, font='Any 15'),
             sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', default=info.option.averaging,
                      font='Any 15'),
             sg.Radio(key='gaussian', text='高斯模糊', group_id='blur_option', default=info.option.gaussian, font='Any 15'),
@@ -168,6 +173,8 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
     processed_frame_count = 0
     prev_frame_time = 0
     curr_frame_time = 0
+    last_kernel_size = 0
+    normalized_kernel = None
     ret_dict['fingerprint_erase_start_timestamp'] = int(time.time() * 1000)
 
     try:
@@ -200,6 +207,8 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
                     if option.flip:
                         frame = cv2.flip(frame, 1)
 
+                    kernel_size = int(option.blur_value)
+
                     info.flags.circle_on = option.circle_on
                     info.flags.connection_on = option.connection_on
                     info.flags.output_on = option.output_on
@@ -208,12 +217,23 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
                     info.flags.box_on = option.box_on
                     info.kernel_size = int(option.blur_value // 2 * 2 + 1)
                     info.blur_mode = 'nope'
-                    if option.averaging:
+                    if option.random:
+                        info.blur_mode = 'random'
+                        if not kernel_size == last_kernel_size:
+                            last_kernel_size = kernel_size
+                            # Generate new filter kernel since kernel size has been changed.
+                            kernel = np.random.randint(1, kernel_size ** 4 + 1, size=[kernel_size] * 2)
+                            sum_kernel = np.sum(kernel)
+                            normalized_kernel = kernel / sum_kernel
+
+                    elif option.averaging:
                         info.blur_mode = 'averaging'
                     elif option.gaussian:
                         info.blur_mode = 'gaussian'
+                        kernel_size = int(kernel_size // 2 * 2 + 1)
                     elif option.median:
                         info.blur_mode = 'median'
+                        kernel_size = int(kernel_size // 2 * 2 + 1)
                     elif option.bilateral:
                         info.blur_mode = 'bilateral'
 
@@ -252,7 +272,7 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
                             image=image
                         )
 
-                    process_fingertip(landmarks_sn, info.blur_mode, info.kernel_size, info)
+                    process_fingertip(landmarks_sn, info.blur_mode, kernel_size, normalized_kernel, info)
 
                     if info.flags.frame_rate_on:
                         curr_frame_time = time.time()

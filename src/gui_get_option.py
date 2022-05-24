@@ -1,5 +1,5 @@
 import PySimpleGUI as sg
-import cv2
+from cv2 import cv2
 
 
 def get_option() -> dict:
@@ -32,11 +32,12 @@ def get_option() -> dict:
         ],
         [
             sg.Text('模糊程度', font='Any 15'),
-            sg.Slider(key='blur_value', range=(1, 51), default_value=7, size=(90, 15), orientation='horizontal')
+            sg.Slider(key='blur_value', range=(1, 51), default_value=11, size=(90, 15), orientation='horizontal')
         ],
         [
             sg.Text('模糊处理', font='Any 15'),
-            sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', default=True, font='Any 15'),
+            sg.Radio(key='random', text='随机模糊', group_id='blur_option', default=True, font='Any 15'),
+            sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', font='Any 15'),
             sg.Radio(key='gaussian', text='高斯模糊', group_id='blur_option', font='Any 15'),
             sg.Radio(key='median', text='中值滤波', group_id='blur_option', font='Any 15'),
             sg.Radio(key='bilateral', text='双边滤波', group_id='blur_option', font='Any 15'),
