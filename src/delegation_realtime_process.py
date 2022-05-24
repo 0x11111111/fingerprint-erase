@@ -154,7 +154,7 @@ def fingerprint_erase(video_source: int, finished_event: Event, ret_dict: dict, 
         ],
         [
             sg.Text('模糊处理', font='Any 15'),
-            sg.Radio(key='random', text='随机模糊', group_id='blur_option', default=info.option.random, font='Any 15'),
+            sg.Radio(key='random', text='随机滤波', group_id='blur_option', default=info.option.random, font='Any 15'),
             sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', default=info.option.averaging,
                      font='Any 15'),
             sg.Radio(key='gaussian', text='高斯模糊', group_id='blur_option', default=info.option.gaussian, font='Any 15'),

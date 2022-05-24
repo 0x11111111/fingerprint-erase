@@ -36,7 +36,7 @@ def get_option() -> dict:
         ],
         [
             sg.Text('模糊处理', font='Any 15'),
-            sg.Radio(key='random', text='随机模糊', group_id='blur_option', default=True, font='Any 15'),
+            sg.Radio(key='random', text='随机滤波', group_id='blur_option', default=True, font='Any 15'),
             sg.Radio(key='averaging', text='平均平滑', group_id='blur_option', font='Any 15'),
             sg.Radio(key='gaussian', text='高斯模糊', group_id='blur_option', font='Any 15'),
             sg.Radio(key='median', text='中值滤波', group_id='blur_option', font='Any 15'),
