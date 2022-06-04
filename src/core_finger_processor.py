@@ -374,15 +374,14 @@ def detect_finger_self_occlusion(_landmarks_sn: types.SimpleNamespace, info: typ
     """
     for _landmarks in _landmarks_sn.landmarks_list:
         if _landmarks.orientation == 'Front':
+            # Thumb is determined by Cross-product
             wrist_tip_distance = {
-                'thumb': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.thumb.tip),
                 'index': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.index.tip),
                 'middle': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.middle.tip),
                 'ring': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.ring.tip),
                 'pinky': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.pinky.tip)
             }
             wrist_cmp_distance = {
-                'thumb': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.thumb.ip),
                 'index': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.index.dip),
                 'middle': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.middle.dip),
                 'ring': calculate_distance_sn(_landmarks.wrist, _landmarks.fingers.ring.dip),
@@ -392,6 +391,20 @@ def detect_finger_self_occlusion(_landmarks_sn: types.SimpleNamespace, info: typ
             for k, v in wrist_tip_distance.items():
                 if v < wrist_cmp_distance[k]:
                     _landmarks.finger_status.__dict__[k] = False
+
+            # Thumb
+            thumb_tip = np.array([int(_landmarks.fingers.thumb.tip.x), int(_landmarks.fingers.thumb.tip.y)])
+            wrist = np.array([int(_landmarks.wrist.x), int(_landmarks.wrist.y)])
+            thumb_vector = thumb_tip - wrist
+
+            index_mcp = np.array([int(_landmarks.fingers.index.mcp.x), int(_landmarks.fingers.index.mcp.y)])
+            index_vector = index_mcp - wrist
+
+            cross_product = np.cross(thumb_vector, index_vector)
+
+            if _landmarks.handedness == 'Left' and cross_product > 0 \
+                    or _landmarks.handedness == 'Right' and cross_product < 0:
+                _landmarks.finger_status.thumb = False
 
 
 def detect_palm_occlusion(_landmarks_sn: types.SimpleNamespace, info: types.SimpleNamespace) -> None:
